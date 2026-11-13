@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f8f6">
+  <meta name="description" content="Borderwise 跨境合规工作台：整理报关资料，生成谨慎的人工复核清单。">
+  <title>Borderwise · 跨境合规工作台</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="./" aria-label="Borderwise 首页">
+      <span class="brand-mark"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 3 29 16 16 29 3 16 16 3Z" stroke="currentColor" stroke-width="2"/><path d="M10 16h12M16 10v12" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="2.4" fill="currentColor"/></svg></span>
+      <span><strong>borderwise<span class="brand-dot">.</span></strong><small>跨境合规工作台</small></span>
+    </a>
+    <button class="new-task" id="newTask"><span class="icon" data-icon="plus"></span> 开启新分析 <span class="new-arrow">↗</span></button>
+    <div class="nav-label">工作空间 <span>WORKSPACE</span></div>
+    <nav class="navigation" aria-label="主菜单">
+      <button class="nav-item active" id="navChat"><span class="icon" data-icon="message"></span>合规助手<span class="nav-indicator"></span></button>
+      <button class="nav-item" id="navForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
+      <button class="nav-item" id="navSources"><span class="icon" data-icon="globe"></span>官方资料库<span class="nav-external">↗</span></button>
+    </nav>
+    <div class="sidebar-divider"></div>
+    <div class="nav-label history-label">最近分析 <span>LOCAL</span></div>
+    <button class="history-item" id="historyButton"><span class="history-dot"></span><span id="historyTitle">暂无已保存的分析</span></button>
+    <div class="sidebar-bottom">
+      <div class="privacy-mini"><span class="privacy-icon" data-icon="shield"></span><div><strong>你的资料，由你掌控</strong><p>默认仅在当前浏览器处理</p></div></div>
+      <button class="settings-link" id="openSettings"><span class="icon" data-icon="settings"></span><span>设置与数据</span><span class="settings-arrow">↗</span></button>
+      <div class="sidebar-footer"><div class="avatar">BW</div><div><strong>个人工作空间</strong><small>LOCAL WORKSPACE</small></div><span class="more-dots">···</span></div>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <header class="topbar">
+      <button class="mobile-menu" id="mobileMenu" aria-label="打开菜单"><span class="icon" data-icon="menu"></span></button>
+      <div class="breadcrumb"><span>工作空间</span><span class="slash">/</span><strong>合规助手</strong></div>
+      <div class="topbar-actions"><span class="mode-indicator"><span></span><b id="modeLabel">本地检查模式</b></span><button class="top-icon" id="topSources" aria-label="查看官方资料"><span class="icon" data-icon="help"></span></button></div>
+    </header>
+
+    <div class="content-wrap">
+      <section class="conversation-area" aria-label="合规助手对话">
+        <div class="conversation-inner">
+          <div class="eyebrow"><span class="eyebrow-line"></span> YOUR CROSS-BORDER COPILOT <span class="eyebrow-star">✳</span></div>
+          <div class="intro" id="intro">
+            <div class="intro-heading"><div><h1>让每一次跨境<br><span>更有把握。</span></h1><p>从报关资料到风险线索，把复杂的合规问题<br class="desktop-break">拆解成清晰、可执行的下一步。</p></div><div class="intro-glyph" aria-hidden="true"><div class="glyph-ring ring-one"></div><div class="glyph-ring ring-two"></div><div class="glyph-core">✳</div><span class="glyph-coordinate coord-a">N 51°</span><span class="glyph-coordinate coord-b">E 116°</span></div></div>
+            <div class="capability-line"><span><i></i> 资料核对</span><span><i></i> 风险提示</span><span><i></i> 可追溯入口</span></div>
+            <div class="start-label"><strong>从一个问题开始</strong><span>EXPLORE A SCENARIO</span></div>
+            <div class="suggestions">
+              <button class="suggestion" data-question="我准备把商品出口到德国，报关前需要检查哪些材料？"><span class="suggestion-icon blue"><span class="icon" data-icon="package"></span></span><strong>出口前资料检查</strong><small>梳理申报必备信息与待确认项</small><span class="suggest-arrow">↗</span></button>
+              <button class="suggestion" data-question="出口到欧盟时，如何核验 HS 编码与 CBAM 是否适用？"><span class="suggestion-icon green"><span class="icon" data-icon="search"></span></span><strong>编码与规则核验</strong><small>明确商品分类与目的地规则</small><span class="suggest-arrow">↗</span></button>
+              <button class="suggestion" data-question="如何核实原产地、制裁名单与潜在物流风险？"><span class="suggestion-icon amber"><span class="icon" data-icon="route"></span></span><strong>跨境风险排查</strong><small>从交易主体到运输安排</small><span class="suggest-arrow">↗</span></button>
+            </div>
+          </div>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+          <div class="composer-wrap">
+            <form id="chatForm" class="composer">
+              <label for="chatInput" class="sr-only">输入合规问题</label>
+              <textarea id="chatInput" rows="2" placeholder="描述你的跨境问题，例如：出口到德国前需要准备什么？" maxlength="2000"></textarea>
+              <div class="composer-bottom"><div class="composer-tools"><button type="button" id="attachCase" class="tool-button"><span class="icon" data-icon="sliders"></span> <span>填写货物资料</span></button><span class="tool-divider"></span><span id="composerMode" class="composer-mode"><span></span> 本地辅助模式</span></div><button class="send-button" type="submit" aria-label="发送问题"><span class="icon" data-icon="arrow-up"></span></button></div>
+            </form>
+            <p class="composer-note"><span class="icon" data-icon="sparkle"></span> 结果仅供辅助，不构成法律意见或报关结论；请以官方信息及专业复核为准。</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="insight-panel" aria-label="分析概览">
+        <div class="panel-top"><div><span class="panel-kicker">YOUR WORKSPACE</span><h2>分析概览</h2></div><span class="panel-options">···</span></div>
+        <div class="case-card">
+          <div class="case-card-head"><span class="mini-icon"><span class="icon" data-icon="layers"></span></span><span class="case-status" id="caseStatus"><span></span> 待开始</span></div>
+          <h3 id="caseProduct">建立你的第一份分析</h3><p id="caseDescription">填写货物及贸易信息，生成一份可人工复核的检查清单。</p>
+          <button id="panelForm" class="case-link">填写货物资料 <span>↗</span></button>
+        </div>
+        <div class="panel-section-head"><div><span class="panel-kicker">REVIEW CHECKLIST</span><h3>检查事项</h3></div><span id="checkCount" class="count-badge">—</span></div>
+        <div id="checklist" class="checklist">
+          <div class="empty-check"><span class="empty-check-icon"><span class="icon" data-icon="check-circle"></span></span><strong>清单将在这里生成</strong><p>先填写资料，我们会帮你梳理需要关注的事项。</p></div>
+        </div>
+        <button id="exportReport" class="export-button" disabled><span class="icon" data-icon="download"></span> 导出复核清单 <span>↓</span></button>
+        <div class="panel-divider"></div>
+        <div class="sources-heading"><div><span class="panel-kicker">TRUSTED SOURCES</span><h3>官方查询入口</h3></div><button id="moreSources">查看全部 ↗</button></div>
+        <div class="source-list"><a href="https://trade.ec.europa.eu/access-to-markets/en/home" target="_blank" rel="noopener noreferrer"><span class="source-symbol eu">EU</span><span><strong>Access2Markets</strong><small>欧盟贸易信息</small></span><span class="external">↗</span></a><a href="https://ofac.treasury.gov/sanctions-list-service" target="_blank" rel="noopener noreferrer"><span class="source-symbol us">US</span><span><strong>OFAC</strong><small>美国制裁名单查询</small></span><span class="external">↗</span></a></div>
+        <div class="panel-note"><span class="icon" data-icon="info"></span><p>官方链接需由你自行查询。本站不自动抓取实时法规或筛查制裁名单。</p></div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" hidden></div>
+<section class="dialog" id="caseDialog" role="dialog" aria-modal="true" aria-labelledby="caseDialogTitle" hidden>
+  <div class="dialog-header"><div><span class="panel-kicker">SHIPMENT DETAILS</span><h2 id="caseDialogTitle">填写货物资料</h2><p>越完整的资料，越有助于识别需要人工复核的缺项。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
+  <form id="caseForm"><div class="form-grid">
+    <label>商品名称 <span>*</span><input name="product" placeholder="例：汽车用铝制零件" maxlength="250"></label>
+    <label>HS 编码 <small>可选</small><input name="hs" placeholder="例：请填写已有编码" maxlength="30"></label>
+    <label>原产地 <input name="origin" placeholder="例：中国" maxlength="100"></label>
+    <label>出口地 <input name="exportCountry" placeholder="例：中国" maxlength="100"></label>
+    <label>目的地 <input name="destination" placeholder="例：德国 / EU" maxlength="100"></label>
+    <label>收货方 / 交易主体 <input name="consignee" placeholder="收货公司或个人名称" maxlength="250"></label>
+    <label>货值 <input name="value" type="number" min="0" step="any" placeholder="例：12000"></label>
+    <label>币种 <input name="currency" placeholder="例：USD" maxlength="20"></label>
+    <label>贸易术语 <input name="incoterm" placeholder="例：FOB / CIF" maxlength="30"></label>
+    <label>运输方式 <input name="transport" placeholder="例：海运" maxlength="100"></label>
+    <label class="full">商品材质与用途 <input name="material" placeholder="例：铝合金，用于车辆零部件" maxlength="500"></label>
+    <label class="full">已有单证 <input name="documents" placeholder="例：商业发票、装箱单；未知请留空" maxlength="500"></label>
+    <label class="full">其他说明 <textarea name="notes" rows="2" placeholder="例如途经国家、转运地、特殊材料等" maxlength="1000"></textarea></label>
+  </div><div class="form-hint"><span class="icon" data-icon="shield"></span> 默认仅在浏览器内处理；如启用 AI 对话，相关资料会发送至你配置的服务。</div><div class="dialog-actions"><button type="button" class="secondary-button" id="fillExample">填入演示数据</button><button type="submit" class="primary-button">生成复核清单 <span>→</span></button></div></form>
+</section>
+
+<section class="dialog compact-dialog" id="sourcesDialog" role="dialog" aria-modal="true" aria-labelledby="sourcesTitle" hidden>
+  <div class="dialog-header"><div><span class="panel-kicker">TRUSTED SOURCES</span><h2 id="sourcesTitle">官方资料库</h2><p>这些是官方查询入口，需结合商品、交易主体和时间逐项核实。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
+  <div class="resource-list">
+    <a href="https://trade.ec.europa.eu/access-to-markets/en/home" target="_blank" rel="noopener noreferrer"><span><strong>欧盟 Access2Markets</strong><small>查询商品贸易条件、关税及程序等信息</small></span><b>↗</b></a>
+    <a href="https://taxation-customs.ec.europa.eu/carbon-border-adjustment-mechanism_en" target="_blank" rel="noopener noreferrer"><span><strong>欧盟 CBAM 官方页面</strong><small>碳边境调节机制政策与实施资料</small></span><b>↗</b></a>
+    <a href="https://ofac.treasury.gov/sanctions-list-service" target="_blank" rel="noopener noreferrer"><span><strong>美国 OFAC 制裁名单服务</strong><small>官方名单数据与查询入口</small></span><b>↗</b></a>
+    <a href="https://online.customs.gov.cn/static/pages/mySearch.html" target="_blank" rel="noopener noreferrer"><span><strong>中国海关政务服务查询</strong><small>税则、税率及归类决定等查询入口</small></span><b>↗</b></a>
+    <a href="https://www.wcoomd.org/en/topics/nomenclature/overview/what-is-the-harmonized-system.aspx" target="_blank" rel="noopener noreferrer"><span><strong>世界海关组织 HS 介绍</strong><small>了解协调制度；具体编码需查询适用税则</small></span><b>↗</b></a>
+  </div><div class="notice-box">本站不自动查询这些网站，不代表上述来源已经核验当前货物。法律法规可能随时变化。</div>
+</section>
+
+  <section class="dialog compact-dialog" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <div class="dialog-header"><div><span class="panel-kicker">PREFERENCES</span><h2 id="settingsTitle">设置与数据</h2><p>可按部署配置默认进入 AI 模式，也可随时切回本地辅助模式。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
+  <form id="settingsForm" class="settings-form">
+    <div class="setting-block"><div class="setting-title"><div><strong>可选：连接 AI 服务</strong><p>连接你自己部署的代理后，对话才会调用模型。</p></div><label class="switch"><input type="checkbox" name="enabled"><span></span></label></div>
+      <label>Worker 地址 <input name="url" type="url" placeholder="https://your-worker.workers.dev" maxlength="500"></label>
+      <label>访问口令 <input name="token" type="password" placeholder="你为 Worker 设置的 APP_TOKEN" autocomplete="off" maxlength="300"></label>
+      <p class="setting-help">开启后，问题、货物资料和检查摘要会发送至该地址及其模型服务商。请先确认隐私政策与模型费用。受保护模式的访问口令须为 1–300 位无空格的可打印 ASCII 字符，不能包含中文；推荐使用 <code>openssl rand -hex 32</code> 生成，并与 Worker 的 APP_TOKEN 一致。若部署者明确开启公开访客模式，则可不填口令，但公开接口可能被滥用并产生模型费用。口令只保留在当前页面内；浏览器关闭或刷新后需重新输入。GitHub Pages 不适合发送口令，请改用允许此用途的静态托管，例如 Cloudflare Pages。</p>
+    </div>
+    <div class="setting-block"><strong>本地数据</strong><p>本地模式下，表单和当前分析保存在本浏览器。可随时清除；请勿在公共设备输入敏感信息。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
+    <div class="dialog-actions"><button type="submit" class="primary-button">保存设置 <span>→</span></button></div>
+  </form>
+</section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
