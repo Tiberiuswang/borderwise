@@ -6,7 +6,7 @@ compatibility_date = "2025-01-01"
 [vars]
 # REQUIRED: replace this placeholder with your one exact HTTPS site origin.
 # Example: https://your-project.pages.dev  (no path and no trailing slash).
-ALLOWED_ORIGIN = "REPLACE_WITH_EXACT_SITE_ORIGIN"
+ALLOWED_ORIGIN = "https://borderwise.pages.dev"
 # Zhipu AI (智谱). Mainland China account -> open.bigmodel.cn ; international z.ai account -> https://api.z.ai/api/paas/v4
 ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 # glm-4.7-flash and glm-4-flash are free models on BigModel; use e.g. glm-4.6 / glm-5 for stronger (paid) ones.
@@ -15,6 +15,6 @@ MODEL = "glm-5.3-flash"
 # THINKING = "disabled"
 # Set to "true" only when you intentionally want visitors to use AI without APP_TOKEN.
 # This can incur provider costs and needs rate limiting/abuse monitoring.
-PUBLIC_ACCESS = "false"
+PUBLIC_ACCESS = "true"
 
 # ZHIPU_API_KEY and APP_TOKEN are Worker secrets, not vars in this file.
