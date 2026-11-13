@@ -10,7 +10,7 @@ ALLOWED_ORIGIN = "https://borderwise.pages.dev"
 # Zhipu AI (智谱). Mainland China account -> open.bigmodel.cn ; international z.ai account -> https://api.z.ai/api/paas/v4
 ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 # glm-4.7-flash and glm-4-flash are free models on BigModel; use e.g. glm-4.6 / glm-5 for stronger (paid) ones.
-MODEL = "glm-5.3-flash"
+MODEL = "glm-4.7-flash"
 # Uncomment to turn off GLM reasoning (faster, fewer tokens):
 # THINKING = "disabled"
 # Set to "true" only when you intentionally want visitors to use AI without APP_TOKEN.
