@@ -1,0 +1,10 @@
+# Replace the Worker name if it conflicts with one in your Cloudflare account.
+name = "borderwise-ai-proxy"
+main = "src/index.mjs"
+compatibility_date = "2025-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://borderwise.pages.dev"
+ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+MODEL = "glm-5.3-flash"
+PUBLIC_ACCESS = "false"
