@@ -119,7 +119,7 @@
     <div class="setting-block"><div class="setting-title"><div><strong>可选：连接 AI 服务</strong><p>连接你自己部署的代理后，对话才会调用模型。</p></div><label class="switch"><input type="checkbox" name="enabled"><span></span></label></div>
       <label>Worker 地址 <input name="url" type="url" placeholder="https://your-worker.workers.dev" maxlength="500"></label>
       <label>访问口令 <input name="token" type="password" placeholder="你为 Worker 设置的 APP_TOKEN" autocomplete="off" maxlength="300"></label>
-      <p class="setting-help">开启后，问题、货物资料和检查摘要会发送至该地址及其模型服务商。请先确认隐私政策与模型费用。受保护模式的访问口令须为 1–300 位无空格的可打印 ASCII 字符，不能包含中文；推荐使用 <code>openssl rand -hex 32</code> 生成，并与 Worker 的 APP_TOKEN 一致。若部署者明确开启公开访客模式，则可不填口令，但公开接口可能被滥用并产生模型费用。口令只保留在当前页面内；浏览器关闭或刷新后需重新输入。GitHub Pages 不适合发送口令，请改用允许此用途的静态托管，例如 Cloudflare Pages。</p>
+      <p class="setting-help">输入token：666999</p>
     </div>
     <div class="setting-block"><strong>本地数据</strong><p>本地模式下，表单和当前分析保存在本浏览器。可随时清除；请勿在公共设备输入敏感信息。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
     <div class="dialog-actions"><button type="submit" class="primary-button">保存设置 <span>→</span></button></div>
