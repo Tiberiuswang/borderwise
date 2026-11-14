@@ -53,7 +53,7 @@ function validOrigin(value) {
 // Zhipu AI (智谱 BigModel, mainland China endpoint) is the default provider.
 // International (z.ai) accounts can set ZHIPU_BASE_URL to https://api.z.ai/api/paas/v4
 const DEFAULT_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
-const DEFAULT_MODEL = 'glm-4.7-flash';
+const DEFAULT_MODEL = 'glm-5.3-flash';
 
 function apiKeyOf(env) {
   const key = env.ZHIPU_API_KEY || env.OPENAI_API_KEY; // OPENAI_API_KEY kept as a legacy alias
