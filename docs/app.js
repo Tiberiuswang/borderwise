@@ -23,6 +23,8 @@ const savedSettings = getStored(STORAGE.settings) || {};
 const defaultUrl = typeof AI_CONFIG.url === 'string' ? AI_CONFIG.url.trim().replace(/\/$/, '') : '';
 let settings = { url: savedSettings.url || defaultUrl, enabled: typeof savedSettings.enabled === 'boolean' ? savedSettings.enabled : Boolean(AI_CONFIG.enabled && defaultUrl), token: '' };
 let busy = false;
+let chatHistory = [];
+const MAX_HISTORY = 8;
 let previousFocus = null;
 const dialogIds = ['caseDialog', 'sourcesDialog', 'settingsDialog'];
 
@@ -74,8 +76,8 @@ function updatePanel() {
   const hasReport = !!report && Array.isArray(report.checks);
   $('#caseStatus').classList.toggle('ready', hasReport);
   $('#caseStatus').innerHTML = hasReport ? '<span></span> 已生成清单' : '<span></span> 待开始';
-  $('#caseProduct').textContent = hasReport ? (shipment.product || '未命名货物') : '建立你的第一份分析';
-  $('#caseDescription').textContent = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') || '已生成资料复核清单' : '填写货物及贸易信息，生成一份可人工复核的检查清单。';
+  $('#caseProduct').textContent = hasReport ? (shipment.product || '未命名货物') : '新的分析';
+  $('#caseDescription').textContent = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') || '已生成资料复核清单' : '尚未填写货物资料';
   $('#caseStatus').setAttribute('aria-label', hasReport ? '已生成清单，不代表合规' : '待开始');
   $('#checkCount').textContent = hasReport ? String(report.checks.length).padStart(2, '0') : '—';
   $('#exportReport').disabled = !hasReport;
@@ -84,7 +86,7 @@ function updatePanel() {
   list.replaceChildren();
   if (!hasReport) {
     const empty = document.createElement('div'); empty.className = 'empty-check';
-    empty.innerHTML = '<span class="empty-check-icon"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true">'+icons['check-circle']+'</svg></span></span><strong>清单将在这里生成</strong><p>先填写资料，我们会帮你梳理需要关注的事项。</p>';
+    empty.innerHTML = '<span class="empty-check-icon"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true">'+icons['check-circle']+'</svg></span></span><strong>清单将在这里生成</strong>';
     list.append(empty); return;
   }
   const priority = { high:0, medium:1, info:2 };
@@ -101,7 +103,7 @@ function updatePanel() {
 }
 function addMessage(kind, content) {
   const node = document.createElement('article'); node.className = `message ${kind}`;
-  const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.textContent = kind === 'user' ? 'YOU' : '✳';
+  const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.textContent = kind === 'user' ? '我' : '〇';
   const body = document.createElement('div'); body.className = 'message-body';
   const meta = document.createElement('div'); meta.className = 'message-meta';
   meta.textContent = kind === 'user' ? '你' : 'Borderwise';
@@ -134,6 +136,48 @@ function updateMode() {
   $('#modeLabel').textContent = settings.enabled ? 'AI 已启用' : '本地检查模式';
   $('#composerMode').innerHTML = settings.enabled ? '<span></span> AI 对话模式' : '<span></span> 本地辅助模式';
 }
+function inlineMarkdown(parent, text) {
+  for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {
+    if (!part) continue;
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) { const strong = document.createElement('strong'); strong.textContent = part.slice(2, -2); parent.append(strong); }
+    else parent.append(document.createTextNode(part.replace(/\*\*/g, '')));
+  }
+}
+function renderMarkdown(target, source) {
+  target.replaceChildren(); target.classList.add('rich');
+  let list = null; let listType = '';
+  const flush = () => { list = null; listType = ''; };
+  for (const raw of source.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) { flush(); continue; }
+    const heading = /^#{1,4}\s+(.*)$/.exec(line);
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    const numbered = /^\d+[.、)]\s+(.*)$/.exec(line);
+    if (heading) { flush(); const h = document.createElement('h4'); inlineMarkdown(h, heading[1]); target.append(h); }
+    else if (bullet || numbered) {
+      const type = bullet ? 'ul' : 'ol';
+      if (!list || listType !== type) { list = document.createElement(type); listType = type; target.append(list); }
+      const li = document.createElement('li'); inlineMarkdown(li, (bullet || numbered)[1]); list.append(li);
+    } else { flush(); const p = document.createElement('p'); inlineMarkdown(p, line); target.append(p); }
+  }
+}
+function splitFollowUps(answer) {
+  const match = /(?:^|\n)\s*【追问】([^\n]+)\s*$/.exec(answer);
+  if (!match) return { body: answer, followUps: [] };
+  const followUps = match[1].split(/[｜|]/).map(item => item.trim().replace(/^[\d.、\s-]+/, '')).filter(item => item && item.length <= 60).slice(0, 3);
+  return { body: answer.slice(0, match.index).trim(), followUps };
+}
+function addFollowUps(node, items) {
+  if (!items.length) return;
+  const wrap = document.createElement('div'); wrap.className = 'follow-ups';
+  const label = document.createElement('span'); label.textContent = '接着问'; wrap.append(label);
+  for (const item of items) {
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = item;
+    button.addEventListener('click', () => { wrap.remove(); sendQuestion(item); });
+    wrap.append(button);
+  }
+  node.querySelector('.message-body').append(wrap);
+}
 async function sendQuestion(question) {
   const content = question.trim();
   if (!content || busy) return;
@@ -141,19 +185,26 @@ async function sendQuestion(question) {
   addMessage('user', content);
   busy = true;
   const submit = $('#chatForm button[type=submit]'); submit.disabled = true;
-  const message = addMessage('assistant', settings.enabled ? '正在请求你配置的 AI 服务…' : '正在整理待核验事项…');
+  const message = addMessage('assistant', settings.enabled ? '正在思考…' : '正在整理待核验事项…');
+  message.node.classList.add('pending');
   try {
     let answer;
     if (settings.enabled) {
       const response = await fetch(settings.url, {
         method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${settings.token}` },
-        body:JSON.stringify({ question:content, shipment, report }),
-        signal:AbortSignal.timeout(45000)
+        body:JSON.stringify({ question:content, shipment, report, history:chatHistory.slice(-MAX_HISTORY) }),
+        signal:AbortSignal.timeout(60000)
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || `请求失败（HTTP ${response.status}）`);
       if (typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
-      answer = `${payload.answer.trim()}\n\n提示：模型输出可能出错，未自动核验实时法规；请查看官方来源并由专业人员复核。`;
+      const { body, followUps } = splitFollowUps(payload.answer.trim());
+      chatHistory.push({ role:'user', content }, { role:'assistant', content: body });
+      chatHistory = chatHistory.slice(-MAX_HISTORY);
+      renderMarkdown(message.text, body);
+      const note = document.createElement('p'); note.className = 'ai-note'; note.textContent = '模型输出可能出错，未核验实时法规；请查看官方来源并由专业人员复核。';
+      message.text.append(note); addFollowUps(message.node, followUps);
+      return;
     } else {
       answer = localAnswer(content, shipment);
     }
@@ -161,6 +212,7 @@ async function sendQuestion(question) {
   } catch (error) {
     message.text.textContent = `未能连接 AI 服务：${error.message || '网络异常'}。请检查地址、访问口令、来源设置及服务商额度；也可以在设置中切换回本地模式。`;
   } finally {
+    message.node.classList.remove('pending');
     busy = false; submit.disabled = false;
     message.node.scrollIntoView({ behavior:'smooth', block:'nearest' });
   }
@@ -185,7 +237,7 @@ function downloadReport(current) {
 
 $('#newTask').addEventListener('click', () => {
   if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
-  shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); $('#messages').replaceChildren(); updatePanel(); $('#sidebar').classList.remove('open'); $('#chatInput').focus(); toast('已开启新分析');
+  chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); $('#messages').replaceChildren(); updatePanel(); $('#sidebar').classList.remove('open'); $('#chatInput').focus(); toast('已开启新分析');
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
 $('#navForm').addEventListener('click', showForm); $('#attachCase').addEventListener('click', showForm); $('#panelForm').addEventListener('click', showForm); $('#historyButton').addEventListener('click', showForm);
@@ -218,7 +270,9 @@ $('#settingsForm').addEventListener('submit', event => {
 $('#clearData').addEventListener('click', () => {
   if (!window.confirm('确定清除此浏览器中保存的货物资料、复核清单及设置？此操作不可撤销。')) return;
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
-  shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); $('#messages').replaceChildren(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); $('#messages').replaceChildren(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
+// Once a conversation starts, let the hero step aside so the answers get the whole page.
+new MutationObserver(() => { $('#intro').hidden = $('#messages').childElementCount > 0; }).observe($('#messages'), { childList:true });
