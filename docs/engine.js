@@ -1,9 +1,3 @@
-/*
- * 本地规则只产生待办，不查询任何实时数据，不替代专业判断。
- * 输入字段均可为字符串；value 也接受数字，documents 也接受字符串数组。
- * 返回的 input 是仅包含公开字段、值均为字符串的副本。
- */
-
 export const SOURCES = Object.freeze([
   { id: 'wco', title: '世界海关组织：HS 协调制度简介', url: 'https://www.wcoomd.org/en/topics/nomenclature/overview/what-is-the-harmonized-system.aspx' },
   { id: 'origin', title: '世界海关组织：原产地规则概览（具体规则须另查适用法域）', url: 'https://www.wcoomd.org/en/topics/origin/overview.aspx' },
@@ -58,7 +52,7 @@ function provided(value) {
   return value !== '' && !UNKNOWN.test(value);
 }
 
-// 国家/地区识别仅用于提示，不将地址解析结果当成法律适用结论。
+
 const EU = new Set([
   'eu', '欧盟', '欧洲联盟', 'european union',
   'at', '奥地利', 'austria', 'be', '比利时', 'belgium', 'bg', '保加利亚', 'bulgaria',
@@ -83,21 +77,21 @@ const RCEP = new Set([
 function matchesCountry(value, aliases) {
   if (!provided(value)) return false;
   const lower = value.toLowerCase().trim();
-  // 含否定或排除措辞时不推断目的地，避免“非欧盟”“not EU”等被误认。
+
   if (/(?:非|不是|不属于|不在|排除|以外|之外|除外|境外)|\b(?:not|non|outside|excluding|except|excluded)\b/i.test(lower)) return false;
-  // 这些独立海关辖区不能仅凭“中国”字样推断为 RCEP 交易地。
+
   if (aliases.has('中国') && /(?:中国|\bchina\b|\bcn\b)/i.test(lower)
       && /(?:香港|澳门|台湾|\bhong\s*kong\b|\bmacau\b|\bmacao\b|\btaiwan\b)/i.test(lower)) return false;
-  // 保留完整字段及分隔片段；附带城市只接受字段开头的完整国家名。
+
   if ([lower, ...lower.split(/[,，/、;；()（）:：]/).map(part => part.trim())]
     .some(part => aliases.has(part))) return true;
   for (const alias of aliases) {
     if (/^[\u4e00-\u9fff]+$/.test(alias) && !['欧盟', '欧洲联盟'].includes(alias) && lower.startsWith(alias)) {
       const rest = lower.slice(alias.length).trimStart();
-      // 后缀仅作地址提示而非地址解析；阻止常见非地点描述造成误判。
+
       if (rest && !/^(?:外|以东|以西|以南|以北|相关|无关|制造|生产|商品|产品|货物|进口|出口|原产)/.test(rest) && /^\p{L}/u.test(rest)) return true;
     }
-    // 西文国家全名后需有空格；两字母代码只允许作为完整字段或分隔片段。
+    
     if (/^[a-z][a-z ]{2,}$/.test(alias) && lower.startsWith(`${alias} `)) {
       const rest = lower.slice(alias.length).trimStart();
       if (/^\p{L}/u.test(rest)) return true;
@@ -114,7 +108,6 @@ function hsFormat(value) {
 
 function amountStatus(value) {
   if (!provided(value)) return 'missing';
-  // 小数与标准千分位可辨识；不接受符号、币种、指数及含糊的数字文本。
   if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(value)) return 'invalid';
   const amount = Number(value.replace(/,/g, ''));
   if (!Number.isFinite(amount)) return 'invalid';
@@ -122,7 +115,6 @@ function amountStatus(value) {
 }
 
 function documentMentioned(text, pattern) {
-  // 只把没有明显否定词的片段当作“清单中提到”，并不验证文件真实存在。
   const negative = /未|无|没|缺|不具|待补|待提供|待准备|尚未|not\s+(?:provided|available|prepared)|missing|none/i;
   return text.split(/[,，;；\n]/).some(part => pattern.test(part) && !negative.test(part));
 }
@@ -135,10 +127,7 @@ function asksEvasion(text) {
     || (badAction.test(t) && subject.test(t));
 }
 
-/**
- * 基于用户输入给出可解释检查；level 是复核优先级而不是通关或法律结论。
- * 每项 sourceId 对应 SOURCES 中一项，资料仅作人工查询入口。
- */
+
 export function analyzeShipment(input = {}) {
   const s = normalize(input);
   const checks = [];
@@ -226,11 +215,11 @@ export function analyzeShipment(input = {}) {
   return { checks, generatedAt: new Date().toISOString(), input: s };
 }
 
-/** 根据常见问题返回纯文本待办，不生成或冒充正式单证。 */
+
 export function localAnswer(question, input = {}) {
   const q = scalar(question).toLowerCase();
   const s = normalize(input);
-  // 规避管制与冒充正式文件的请求优先拒绝，不能因命中其他主题而被覆盖。
+  
   if (asksEvasion(q)) {
     return `不能帮助通过转运、隐瞒交易方或虚报原产地来规避制裁或出口管制。请如实记录生产和运输事实，暂停可疑交易，并向适用主管机关或专业人士核实。\n\n${BOUNDARY}`;
   }
