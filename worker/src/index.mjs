@@ -1,7 +1,5 @@
-// Optional Cloudflare Worker for the static Borderwise site. Secrets live only in
-// Cloudflare Worker secrets, never in this source file or the static site.
 const MAX_BODY_BYTES = 64 * 1024;
-const MAX_QUESTION_CHARS = 2000; // JavaScript UTF-16 code units
+const MAX_QUESTION_CHARS = 2000; 
 const MAX_SHIPMENT_BYTES = 16 * 1024;
 const MAX_REPORT_BYTES = 32 * 1024;
 const MAX_UPSTREAM_BYTES = 1024 * 1024;
@@ -42,21 +40,19 @@ function validOrigin(value) {
   if (typeof value !== 'string' || !value) return false;
   try {
     const url = new URL(value);
-    // Require a canonical HTTPS origin, not a URL with a path, trailing slash,
-    // credentials, query, or fragment. Exact string comparison follows below.
+    
     return url.protocol === 'https:' && url.origin === value;
   } catch {
     return false;
   }
 }
 
-// Zhipu AI (智谱 BigModel, mainland China endpoint) is the default provider.
-// International (z.ai) accounts can set ZHIPU_BASE_URL to https://api.z.ai/api/paas/v4
+
 const DEFAULT_BASE_URL = 'https://open.bigmodel.cn/api/paas/v4';
 const DEFAULT_MODEL = 'glm-5.3-flash';
 
 function apiKeyOf(env) {
-  const key = env.ZHIPU_API_KEY || env.OPENAI_API_KEY; // OPENAI_API_KEY kept as a legacy alias
+  const key = env.ZHIPU_API_KEY || env.OPENAI_API_KEY; 
   return typeof key === 'string' ? key : '';
 }
 
@@ -71,8 +67,7 @@ function upstreamUrl(value) {
   }
 }
 
-// Hash both values to a fixed length before comparison. Do not return either
-// digest or the supplied/expected token to callers or log them.
+
 async function tokenMatches(supplied, expected) {
   const [a, b] = await Promise.all([
     crypto.subtle.digest('SHA-256', encoder.encode(supplied)),
@@ -87,8 +82,7 @@ async function tokenMatches(supplied, expected) {
 
 class SizeLimitError extends Error {}
 
-// Content-Length is merely a fast rejection; this stream limit also applies
-// when the header is missing or not trustworthy.
+
 async function readBytes(stream, limit) {
   if (!stream) return new Uint8Array();
   const reader = stream.getReader();
@@ -100,7 +94,7 @@ async function readBytes(stream, limit) {
       if (done) break;
       size += value.byteLength;
       if (size > limit) {
-        // Cancellation is best-effort; never wait indefinitely on a peer.
+       
         reader.cancel().catch(() => {});
         throw new SizeLimitError();
       }
@@ -128,7 +122,7 @@ function validContext(value) {
 
 async function handle(request, env) {
   const allowedOrigin = env.ALLOWED_ORIGIN;
-  // A broken allowlist fails closed. No wildcard and no origin reflection.
+  
   if (!validOrigin(allowedOrigin)) {
     return response(500, { error: '服务配置不完整，请联系部署者。' });
   }
@@ -241,15 +235,15 @@ async function handle(request, env) {
           { role: 'user', content: JSON.stringify({ question: payload.question.trim(), shipment, report }) },
         ],
         stream: false,
-        // Optional: skip GLM "thinking" for faster, cheaper answers (set THINKING = "disabled").
+       
         ...(env.THINKING === 'disabled' ? { thinking: { type: 'disabled' } } : {}),
       }),
-      // Never forward the provider authorization header to a redirect target.
+      
       redirect: 'manual',
       signal: controller.signal,
     });
     if (!upstream.ok) {
-      // Never relay provider body, raw provider errors, authorization or keys.
+      
       upstream.body?.cancel().catch(() => {});
       return response(502, { error: '模型服务请求失败或额度受限，请稍后重试或联系部署者。' }, origin);
     }
@@ -259,7 +253,7 @@ async function handle(request, env) {
     if (typeof answer !== 'string' || !answer.trim()) {
       return response(502, { error: '模型服务未返回有效回答，请稍后重试。' }, origin);
     }
-    // Defense in depth in case a provider echoes either configured secret.
+   
     let safeAnswer = answer.trim().replaceAll(apiKey, '[已隐藏]');
     if (typeof env.APP_TOKEN === 'string' && env.APP_TOKEN) safeAnswer = safeAnswer.replaceAll(env.APP_TOKEN, '[已隐藏]');
     return response(200, { answer: safeAnswer }, origin);
