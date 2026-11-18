@@ -27,6 +27,8 @@ let chatHistory = [];
 const MAX_HISTORY = 8;
 let previousFocus = null;
 const dialogIds = ['caseDialog', 'sourcesDialog', 'settingsDialog'];
+const mobileLayout = matchMedia('(max-width: 760px)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 function toast(text) {
   const el = $('#toast');
@@ -35,10 +37,25 @@ function toast(text) {
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => el.classList.remove('show'), 3000);
 }
+function setMobileMenu(open) {
+  $('#sidebar').classList.toggle('open', open);
+  $('#sidebarBackdrop').hidden = !open;
+  $('#mobileMenu').setAttribute('aria-expanded', String(open));
+  $('#workspace').inert = open;
+  $('.skip-link').inert = open;
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+
+function dismissMobileMenu() {
+  setMobileMenu(false);
+  $('#mobileMenu').focus();
+}
+
 function openDialog(id) {
-  previousFocus = document.activeElement;
+  const trigger = document.activeElement;
+  previousFocus = mobileLayout.matches && $('#sidebar').contains(trigger) ? $('#mobileMenu') : trigger;
   closeDialogs(false);
-  $('#sidebar').classList.remove('open');
+  $('.app-shell').inert = true;
   $('#overlay').hidden = false;
   const dialog = $(`#${id}`);
   dialog.hidden = false;
@@ -49,9 +66,10 @@ function closeDialogs(restoreFocus = true) {
   dialogIds.forEach(id => { $(`#${id}`).hidden = true; });
   $('#settingsForm').elements.token.value = '';
   $('#overlay').hidden = true;
-  document.body.style.overflow = '';
-  $('#sidebar').classList.remove('open');
-  if (restoreFocus && previousFocus instanceof HTMLElement) previousFocus.focus();
+  const dialogWasOpen = $('.app-shell').inert;
+  $('.app-shell').inert = false;
+  setMobileMenu(false);
+  if (restoreFocus && dialogWasOpen && previousFocus instanceof HTMLElement) previousFocus.focus();
 }
 function setFormValues(input) {
   const form = $('#caseForm');
@@ -101,7 +119,17 @@ function updatePanel() {
   }
   if (report.checks.length > 5) { const more = document.createElement('div'); more.className = 'check-copy'; more.style.paddingTop = '5px'; const small = document.createElement('small'); small.textContent = `另有 ${report.checks.length - 5} 项，详见对话或导出清单`; more.append(small); list.append(more); }
 }
+function clearMessages() {
+  $('#messages').replaceChildren();
+  $('#intro').hidden = false;
+}
+
+function scrollToMessage(node) {
+  node.scrollIntoView({ behavior: reducedMotion.matches ? 'instant' : 'smooth', block: 'start' });
+}
+
 function addMessage(kind, content) {
+  $('#intro').hidden = true;
   const node = document.createElement('article'); node.className = `message ${kind}`;
   const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.textContent = kind === 'user' ? '我' : '〇';
   const body = document.createElement('div'); body.className = 'message-body';
@@ -130,7 +158,7 @@ function addReport(current, shouldScroll = true) {
   }
   const download = document.createElement('button'); download.type = 'button'; download.className = 'report-download'; download.textContent = '下载完整复核清单 ↓'; download.addEventListener('click', () => downloadReport(current));
   preview.append(title, desc, list, download); text.append(preview);
-  if (shouldScroll) node.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  if (shouldScroll) scrollToMessage(node);
 }
 function updateMode() {
   $('#modeLabel').textContent = settings.enabled ? 'AI 已启用' : '本地检查模式';
@@ -214,7 +242,7 @@ async function sendQuestion(question) {
   } finally {
     message.node.classList.remove('pending');
     busy = false; submit.disabled = false;
-    message.node.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    scrollToMessage(message.node);
   }
 }
 function markdownReport(current) {
@@ -237,23 +265,41 @@ function downloadReport(current) {
 
 $('#newTask').addEventListener('click', () => {
   if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
-  chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); $('#messages').replaceChildren(); updatePanel(); $('#sidebar').classList.remove('open'); $('#chatInput').focus(); toast('已开启新分析');
+  chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
 $('#navForm').addEventListener('click', showForm); $('#attachCase').addEventListener('click', showForm); $('#panelForm').addEventListener('click', showForm); $('#historyButton').addEventListener('click', showForm);
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
-$('#mobileMenu').addEventListener('click', () => { $('#sidebar').classList.toggle('open'); });
+$('#mobileMenu').addEventListener('click', () => {
+  setMobileMenu(true);
+  $('#closeMobileMenu').focus();
+});
+$('#closeMobileMenu').addEventListener('click', dismissMobileMenu);
+$('#sidebarBackdrop').addEventListener('click', dismissMobileMenu);
+mobileLayout.addEventListener('change', () => {
+  if (!mobileLayout.matches && $('#sidebar').classList.contains('open')) {
+    setMobileMenu(false);
+    $('#navChat').focus();
+  }
+});
 $('#overlay').addEventListener('click', () => closeDialogs());
 $$('[data-close]').forEach(button => button.addEventListener('click', () => closeDialogs()));
-document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDialogs(); });
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  if ($('#sidebar').classList.contains('open')) dismissMobileMenu();
+  else if ($('.app-shell').inert) closeDialogs();
+});
 $('#fillExample').addEventListener('click', () => { setFormValues(EXAMPLE_SHIPMENT); toast('已填入演示资料，请按实际业务修改'); });
 $('#caseForm').addEventListener('submit', event => {
   event.preventDefault(); shipment = readFormValues(); report = analyzeShipment(shipment); setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); updatePanel(); closeDialogs(); addReport(report); toast('复核清单已生成');
 });
 $('#chatForm').addEventListener('submit', event => { event.preventDefault(); sendQuestion($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendQuestion(event.currentTarget.value); } });
-$$('.suggestion').forEach(button => button.addEventListener('click', () => sendQuestion(button.dataset.question || '')));
+$$('.suggestion').forEach(button => button.addEventListener('click', () => {
+  $('#chatInput').focus({ preventScroll: true });
+  sendQuestion(button.dataset.question || '');
+}));
 $('#exportReport').addEventListener('click', () => downloadReport(report));
 $('#settingsForm').addEventListener('submit', event => {
   event.preventDefault(); const form = event.currentTarget; const enabled = form.elements.enabled.checked; const url = form.elements.url.value.trim().replace(/\/$/, ''); const token = form.elements.token.value;
@@ -270,9 +316,7 @@ $('#settingsForm').addEventListener('submit', event => {
 $('#clearData').addEventListener('click', () => {
   if (!window.confirm('确定清除此浏览器中保存的货物资料、复核清单及设置？此操作不可撤销。')) return;
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
-  chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); $('#messages').replaceChildren(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
-// Once a conversation starts, let the hero step aside so the answers get the whole page.
-new MutationObserver(() => { $('#intro').hidden = $('#messages').childElementCount > 0; }).observe($('#messages'), { childList:true });
