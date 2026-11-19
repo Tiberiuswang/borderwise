@@ -22,7 +22,7 @@ test('US tariff proxy accepts only digits and always fetches a fixed USITC range
     assert.equal(url.origin + url.pathname, 'https://hts.usitc.gov/reststop/exportList');
     assert.equal(url.searchParams.get('from'), from);
     assert.equal(url.searchParams.get('to'), to);
-    assert.equal(options.redirect, 'error');
+    assert.equal(options.redirect, 'manual');
   }
 });
 

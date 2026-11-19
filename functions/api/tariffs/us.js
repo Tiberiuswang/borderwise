@@ -31,7 +31,7 @@ async function readRows(response) {
 }
 
 async function fetchLatestRelease() {
-  const index = await fetch(USITC_ARCHIVE, { redirect: 'error', signal: AbortSignal.timeout(5_000) });
+  const index = await fetch(USITC_ARCHIVE, { redirect: 'manual', signal: AbortSignal.timeout(5_000) });
   if (!index.ok) throw new Error('USITC archive unavailable');
   const match = RELEASE_LINK.exec(await index.text());
   if (!match) throw new Error('No USITC archive release found');
@@ -39,7 +39,7 @@ async function fetchLatestRelease() {
   const edition = revision ? `${year} HTS Revision ${revision}` : `${year} HTS Basic Edition`;
   const file = await fetch(new URL(path, USITC_ARCHIVE), {
     headers: { Accept: 'application/json' },
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(12_000),
   });
   if (!file.ok || !file.body || Number(file.headers.get('Content-Length')) > MAX_ARCHIVE_BYTES) {
@@ -78,7 +78,7 @@ export async function onRequestGet({ request }) {
   try {
     const response = await fetch(upstream, {
       headers: { Accept: 'application/json' },
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok || Number(response.headers.get('Content-Length')) > MAX_RESPONSE_BYTES) {
