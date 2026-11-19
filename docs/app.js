@@ -1,4 +1,4 @@
-import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, localAnswer } from './engine.js';
+import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, getLocalFollowUps, localAnswer } from './engine.js';
 import { AI_CONFIG } from './ai-config.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -17,14 +17,15 @@ $$('[data-icon]').forEach(element => { element.innerHTML = `<svg viewBox="0 0 24
 const STORAGE = { shipment:'borderwise-shipment-v1', report:'borderwise-report-v1', settings:'borderwise-settings-v1' };
 const getStored = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
 const setStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { toast('无法保存到本地浏览器，当前内容仍可使用。'); } };
-let shipment = getStored(STORAGE.shipment) || {};
 let report = getStored(STORAGE.report) || null;
+let shipment = report?.input || getStored(STORAGE.shipment) || {};
 const savedSettings = getStored(STORAGE.settings) || {};
 const defaultUrl = typeof AI_CONFIG.url === 'string' ? AI_CONFIG.url.trim().replace(/\/$/, '') : '';
 let settings = { url: savedSettings.url || defaultUrl, enabled: typeof savedSettings.enabled === 'boolean' ? savedSettings.enabled : Boolean(AI_CONFIG.enabled && defaultUrl), token: '' };
-let busy = false;
+let activeReply = null;
 let chatHistory = [];
 const MAX_HISTORY = 8;
+const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
 const dialogIds = ['caseDialog', 'sourcesDialog', 'settingsDialog'];
 const mobileLayout = matchMedia('(max-width: 760px)');
@@ -90,6 +91,20 @@ function showSettings() {
   form.elements.token.value = settings.token;
 }
 function levelLabel(level) { return level === 'high' ? '优先复核' : level === 'medium' ? '需确认' : '人工核验'; }
+
+function reviewedChecks(current) {
+  const saved = new Set(Array.isArray(current.reviewedIds) ? current.reviewedIds : []);
+  return new Set(current.checks.filter(check => saved.has(check.id)).map(check => check.id));
+}
+
+function orderedChecks(current) {
+  return [...current.checks].sort((a, b) => (checkPriority[a.level] ?? 3) - (checkPriority[b.level] ?? 3));
+}
+
+function reviewSummary(current) {
+  return `已人工复核 ${reviewedChecks(current).size} / ${current.checks.length} 项`;
+}
+
 function updatePanel() {
   const hasReport = !!report && Array.isArray(report.checks);
   $('#caseStatus').classList.toggle('ready', hasReport);
@@ -97,8 +112,10 @@ function updatePanel() {
   $('#caseProduct').textContent = hasReport ? (shipment.product || '未命名货物') : '新的分析';
   $('#caseDescription').textContent = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') || '已生成资料复核清单' : '尚未填写货物资料';
   $('#caseStatus').setAttribute('aria-label', hasReport ? '已生成清单，不代表合规' : '待开始');
-  $('#checkCount').textContent = hasReport ? String(report.checks.length).padStart(2, '0') : '—';
+  $('#checkCount').textContent = hasReport ? String(report.checks.length) : '—';
   $('#exportReport').disabled = !hasReport;
+  $('#viewReview').hidden = !hasReport;
+  $('#reviewProgressGroup').hidden = !hasReport;
   $('#historyTitle').textContent = hasReport ? (shipment.product || '未命名货物') : '暂无已保存的分析';
   const list = $('#checklist');
   list.replaceChildren();
@@ -107,9 +124,13 @@ function updatePanel() {
     empty.innerHTML = '<span class="empty-check-icon"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true">'+icons['check-circle']+'</svg></span></span><strong>清单将在这里生成</strong>';
     list.append(empty); return;
   }
-  const priority = { high:0, medium:1, info:2 };
-  const orderedChecks = [...report.checks].sort((a, b) => (priority[a.level] ?? 3) - (priority[b.level] ?? 3));
-  for (const check of orderedChecks.slice(0, 5)) {
+  const reviewed = reviewedChecks(report);
+  const pending = orderedChecks(report).filter(check => !reviewed.has(check.id));
+  const progress = $('#reviewProgress');
+  progress.max = Math.max(report.checks.length, 1);
+  progress.value = reviewed.size;
+  $('#reviewProgressText').textContent = reviewSummary(report);
+  for (const check of pending.slice(0, 5)) {
     const row = document.createElement('div'); row.className = 'check-row';
     const dot = document.createElement('span'); dot.className = `check-dot ${['high','medium','info'].includes(check.level) ? check.level : 'info'}`;
     const copy = document.createElement('div'); copy.className = 'check-copy';
@@ -117,7 +138,12 @@ function updatePanel() {
     const subtitle = document.createElement('small'); subtitle.textContent = levelLabel(check.level);
     copy.append(title, subtitle); row.append(dot, copy); list.append(row);
   }
-  if (report.checks.length > 5) { const more = document.createElement('div'); more.className = 'check-copy'; more.style.paddingTop = '5px'; const small = document.createElement('small'); small.textContent = `另有 ${report.checks.length - 5} 项，详见对话或导出清单`; more.append(small); list.append(more); }
+  if (pending.length > 5 || !pending.length) {
+    const note = document.createElement('p');
+    note.className = 'review-panel-note';
+    note.textContent = pending.length ? `另有 ${pending.length - 5} 项待复核` : '所有事项均已标记为人工复核。';
+    list.append(note);
+  }
 }
 function clearMessages() {
   $('#messages').replaceChildren();
@@ -135,18 +161,33 @@ function addMessage(kind, content) {
   const body = document.createElement('div'); body.className = 'message-body';
   const meta = document.createElement('div'); meta.className = 'message-meta';
   meta.textContent = kind === 'user' ? '你' : 'Borderwise';
-  const small = document.createElement('small'); small.textContent = kind === 'user' ? 'YOUR MESSAGE' : (settings.enabled ? 'AI ASSISTANT' : 'LOCAL ASSISTANT'); meta.append(small);
+  const small = document.createElement('small');
+  small.textContent = { user: '提问', 'report-message': '复核清单' }[kind] || '本地助手';
+  meta.append(small);
   const text = document.createElement('div'); text.className = 'message-text'; text.textContent = content;
   body.append(meta, text); node.append(avatar, body); $('#messages').append(node);
-  return { node, text };
+  return { node, text, mode: small };
 }
 function addReport(current, shouldScroll = true) {
+  const previous = $$('.report-review-hint', $('#messages')).at(-1);
+  if (previous) {
+    previous.textContent = '历史版本。请在最新清单更新复核进度。';
+    $$('.review-toggle input', previous.closest('.report-preview')).forEach(input => { input.disabled = true; });
+  }
   const { node, text } = addMessage('report-message', '资料已整理。以下是辅助复核线索，不代表已经合规、已通过制裁筛查或可直接申报。');
   const preview = document.createElement('div'); preview.className = 'report-preview';
   const title = document.createElement('h4'); title.textContent = `货物复核清单 · ${current.checks.length} 项`;
+  title.tabIndex = -1;
   const desc = document.createElement('p'); desc.textContent = '请结合真实货物、目的地规则与官方来源逐项核实。缺少提示不等于没有风险。';
+  const summary = document.createElement('p');
+  summary.className = 'report-review-summary';
+  summary.textContent = reviewSummary(current);
+  const hint = document.createElement('p');
+  hint.className = 'report-review-hint';
+  hint.textContent = '逐项勾选已由人工核实的内容，进度保存在本机。';
   const list = document.createElement('ul');
-  for (const check of current.checks) {
+  const reviewed = reviewedChecks(current);
+  for (const check of orderedChecks(current)) {
     const item = document.createElement('li');
     const heading = document.createElement('strong'); heading.textContent = `【${levelLabel(check.level)}】${check.title}`;
     const explanation = document.createElement('p'); explanation.textContent = check.detail || '';
@@ -154,15 +195,37 @@ function addReport(current, shouldScroll = true) {
     item.append(heading, explanation, action);
     const source = SOURCES.find(entry => entry.id === check.sourceId);
     if (source) { const link = document.createElement('a'); link.href = source.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = `查询入口：${source.title} ↗`; item.append(link); }
+    const label = document.createElement('label');
+    label.className = 'review-toggle';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = reviewed.has(check.id);
+    checkbox.setAttribute('aria-label', `已人工复核：${check.title}`);
+    checkbox.addEventListener('change', () => {
+      if (current !== report) return;
+      if (checkbox.checked) reviewed.add(check.id);
+      else reviewed.delete(check.id);
+      report.reviewedIds = [...reviewed];
+      setStored(STORAGE.report, report);
+      summary.textContent = reviewSummary(report);
+      updatePanel();
+    });
+    label.append(checkbox, '已人工复核');
+    item.append(label);
     list.append(item);
   }
   const download = document.createElement('button'); download.type = 'button'; download.className = 'report-download'; download.textContent = '下载完整复核清单 ↓'; download.addEventListener('click', () => downloadReport(current));
-  preview.append(title, desc, list, download); text.append(preview);
+  preview.append(title, desc, summary, hint, list, download); text.append(preview);
   if (shouldScroll) scrollToMessage(node);
 }
+function canUseAI() {
+  return Boolean(settings.enabled && settings.url && (AI_CONFIG.publicAccess || settings.token));
+}
+
 function updateMode() {
-  $('#modeLabel').textContent = settings.enabled ? 'AI 已启用' : '本地检查模式';
-  $('#composerMode').innerHTML = settings.enabled ? '<span></span> AI 对话模式' : '<span></span> 本地辅助模式';
+  const ai = canUseAI();
+  $('#modeLabel').textContent = ai ? 'AI 已启用' : (settings.enabled ? 'AI 待连接' : '本地检查模式');
+  $('#composerMode').innerHTML = ai ? '<span></span> AI 对话模式' : '<span></span> 本地辅助模式';
 }
 function inlineMarkdown(parent, text) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {
@@ -201,58 +264,93 @@ function addFollowUps(node, items) {
   const label = document.createElement('span'); label.textContent = '接着问'; wrap.append(label);
   for (const item of items) {
     const button = document.createElement('button'); button.type = 'button'; button.textContent = item;
-    button.addEventListener('click', () => { wrap.remove(); sendQuestion(item); });
+    button.addEventListener('click', () => {
+      if (activeReply) return;
+      $('#chatInput').focus({ preventScroll: true });
+      wrap.remove();
+      sendQuestion(item);
+    });
     wrap.append(button);
   }
   node.querySelector('.message-body').append(wrap);
 }
+function showLocalAnswer(message, question, currentShipment, fallback = '') {
+  message.mode.textContent = '本地助手';
+  message.text.textContent = localAnswer(question, currentShipment);
+  if (fallback) {
+    const note = document.createElement('p');
+    note.className = 'ai-fallback-note';
+    note.textContent = fallback;
+    message.text.prepend(note);
+  }
+  addFollowUps(message.node, getLocalFollowUps(question, currentShipment));
+}
+
 async function sendQuestion(question) {
   const content = question.trim();
-  if (!content || busy) return;
+  if (!content || activeReply) return;
   $('#chatInput').value = '';
   addMessage('user', content);
-  busy = true;
-  const submit = $('#chatForm button[type=submit]'); submit.disabled = true;
-  const message = addMessage('assistant', settings.enabled ? '正在思考…' : '正在整理待核验事项…');
+  const currentShipment = shipment;
+  if (!canUseAI()) {
+    const message = addMessage('assistant', '');
+    const note = settings.enabled ? 'AI 待连接，本次由本地助手回答。可在设置中重新连接。' : '';
+    showLocalAnswer(message, content, currentShipment, note);
+    scrollToMessage(message.node);
+    return;
+  }
+
+  const controller = new AbortController();
+  activeReply = controller;
+  const submit = $('#chatForm button[type=submit]');
+  submit.disabled = true;
+  const message = addMessage('assistant', '正在整理待核验事项…');
+  message.mode.textContent = 'AI 助手';
   message.node.classList.add('pending');
   try {
-    let answer;
-    if (settings.enabled) {
-      const response = await fetch(settings.url, {
-        method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${settings.token}` },
-        body:JSON.stringify({ question:content, shipment, report, history:chatHistory.slice(-MAX_HISTORY) }),
-        signal:AbortSignal.timeout(60000)
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || `请求失败（HTTP ${response.status}）`);
-      if (typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
-      const { body, followUps } = splitFollowUps(payload.answer.trim());
-      chatHistory.push({ role:'user', content }, { role:'assistant', content: body });
-      chatHistory = chatHistory.slice(-MAX_HISTORY);
-      renderMarkdown(message.text, body);
-      const note = document.createElement('p'); note.className = 'ai-note'; note.textContent = '模型输出可能出错，未核验实时法规；请查看官方来源并由专业人员复核。';
-      message.text.append(note); addFollowUps(message.node, followUps);
-      return;
-    } else {
-      answer = localAnswer(content, shipment);
+    const reportContext = report && { checks: report.checks, generatedAt: report.generatedAt, input: report.input };
+    const response = await fetch(settings.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.token}` },
+      body: JSON.stringify({ question: content, shipment: currentShipment, report: reportContext, history: chatHistory }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
+    });
+    const payload = await response.json();
+    if (controller.signal.aborted) return;
+    if (!response.ok || typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
+    const { body, followUps } = splitFollowUps(payload.answer.trim());
+    if (!body) throw new Error('AI 服务未返回有效内容。');
+    renderMarkdown(message.text, body);
+    const note = document.createElement('p');
+    note.className = 'ai-note';
+    note.textContent = '模型输出可能出错，未核验实时法规；请查看官方来源并由专业人员复核。';
+    message.text.append(note);
+    addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
+    chatHistory.push({ role: 'user', content }, { role: 'assistant', content: body });
+    chatHistory = chatHistory.slice(-MAX_HISTORY);
+  } catch {
+    if (!controller.signal.aborted) {
+      showLocalAnswer(message, content, currentShipment, 'AI 服务未能回答，本次已切换为本地回答。可在设置中检查连接。');
     }
-    message.text.textContent = answer;
-  } catch (error) {
-    message.text.textContent = `未能连接 AI 服务：${error.message || '网络异常'}。请检查地址、访问口令、来源设置及服务商额度；也可以在设置中切换回本地模式。`;
   } finally {
-    message.node.classList.remove('pending');
-    busy = false; submit.disabled = false;
-    scrollToMessage(message.node);
+    activeReply = null;
+    submit.disabled = false;
+    if (controller.signal.aborted) message.node.remove();
+    else {
+      message.node.classList.remove('pending');
+      scrollToMessage(message.node);
+    }
   }
 }
 function markdownReport(current) {
   const lines = ['# Borderwise 货物复核清单','',`生成时间：${current.generatedAt || new Date().toISOString()}`,'','> 本清单为辅助提示，不构成法律意见或申报结论。未核验实时法规和制裁名单，未提示不代表无风险。','', '## 货物资料'];
   const labels = {product:'商品名称',hs:'HS 编码',origin:'原产地',exportCountry:'出口地',destination:'目的地',value:'货值',currency:'币种',incoterm:'贸易术语',consignee:'收货方',material:'材质与用途',transport:'运输方式',documents:'已有单证',notes:'其他说明'};
   for (const [key, label] of Object.entries(labels)) lines.push(`- ${label}：${String(current.input?.[key] || '未填写').replace(/[\r\n]+/g, ' ')}`);
-  lines.push('', '## 待复核事项');
-  for (const check of current.checks) {
+  const reviewed = reviewedChecks(current);
+  lines.push('', '## 人工复核事项', '', reviewSummary(current));
+  for (const check of orderedChecks(current)) {
     const source = SOURCES.find(entry => entry.id === check.sourceId);
-    lines.push('', `### ${levelLabel(check.level)} · ${check.title}`, '', String(check.detail || ''), '', `建议：${String(check.action || '请人工核实')}`, ...(source ? ['', `查询入口：${source.title} — ${source.url}`] : []));
+    lines.push('', `### ${levelLabel(check.level)} · ${check.title}`, '', `- [${reviewed.has(check.id) ? 'x' : ' '}] 已人工复核`, '', String(check.detail || ''), '', `建议：${String(check.action || '请人工核实')}`, ...(source ? ['', `查询入口：${source.title} — ${source.url}`] : []));
   }
   lines.push('', '## 官方查询入口', '', '- 欧盟 Access2Markets：https://trade.ec.europa.eu/access-to-markets/en/home', '- 欧盟 CBAM：https://taxation-customs.ec.europa.eu/carbon-border-adjustment-mechanism_en', '- OFAC 制裁名单：https://ofac.treasury.gov/sanctions-list-service', '- 中国海关：https://online.customs.gov.cn/static/pages/mySearch.html', '', '---', '由 Borderwise 本地辅助检查生成；请由专业人员核验并结合适用时间、主体、货物及真实资料作判断。', '');
   return lines.join('\n');
@@ -265,6 +363,7 @@ function downloadReport(current) {
 
 $('#newTask').addEventListener('click', () => {
   if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
+  activeReply?.abort();
   chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
@@ -292,7 +391,28 @@ document.addEventListener('keydown', event => {
 });
 $('#fillExample').addEventListener('click', () => { setFormValues(EXAMPLE_SHIPMENT); toast('已填入演示资料，请按实际业务修改'); });
 $('#caseForm').addEventListener('submit', event => {
-  event.preventDefault(); shipment = readFormValues(); report = analyzeShipment(shipment); setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); updatePanel(); closeDialogs(); addReport(report); toast('复核清单已生成');
+  event.preventDefault();
+  const next = analyzeShipment(readFormValues());
+  const previousReviewed = report && Array.isArray(report.checks) ? reviewedChecks(report) : new Set();
+  const sameShipment = Array.isArray(report?.checks) &&
+    Object.entries(next.input).every(([key, value]) => value === report.input?.[key]);
+  if (sameShipment) {
+    const previousChecks = new Map(report.checks.map(check => [check.id, check]));
+    next.reviewedIds = next.checks.filter(check => previousReviewed.has(check.id) &&
+      JSON.stringify(check) === JSON.stringify(previousChecks.get(check.id))).map(check => check.id);
+  } else {
+    activeReply?.abort();
+    chatHistory = [];
+  }
+  shipment = next.input;
+  report = next;
+  setStored(STORAGE.shipment, shipment);
+  setStored(STORAGE.report, report);
+  updatePanel();
+  closeDialogs();
+  addReport(report);
+  const removedReviews = previousReviewed.size - reviewedChecks(report).size;
+  toast(removedReviews ? `已重新生成清单，${removedReviews} 项需重新复核` : '复核清单已生成');
 });
 $('#chatForm').addEventListener('submit', event => { event.preventDefault(); sendQuestion($('#chatInput').value); });
 $('#chatInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendQuestion(event.currentTarget.value); } });
@@ -301,6 +421,12 @@ $$('.suggestion').forEach(button => button.addEventListener('click', () => {
   sendQuestion(button.dataset.question || '');
 }));
 $('#exportReport').addEventListener('click', () => downloadReport(report));
+$('#viewReview').addEventListener('click', () => {
+  const heading = $$('.report-preview h4', $('#messages')).at(-1);
+  if (!heading) return;
+  heading.focus({ preventScroll: true });
+  scrollToMessage(heading.closest('.message'));
+});
 $('#settingsForm').addEventListener('submit', event => {
   event.preventDefault(); const form = event.currentTarget; const enabled = form.elements.enabled.checked; const url = form.elements.url.value.trim().replace(/\/$/, ''); const token = form.elements.token.value;
   if (enabled) {
@@ -311,10 +437,13 @@ $('#settingsForm').addEventListener('submit', event => {
   }
   if ((token || (enabled && !AI_CONFIG.publicAccess)) && !/^[\x21-\x7e]{1,300}$/.test(token)) { toast('访问口令须为 1–300 位无空格的可打印 ASCII 字符'); return; }
   if (enabled && !AI_CONFIG.publicAccess && !token) { toast('请填写 Worker 访问口令，或在 ai-config.js 中确认公开访客模式'); return; }
+  activeReply?.abort();
+  chatHistory = [];
   settings = { enabled, url, token }; setStored(STORAGE.settings, { url, enabled }); updateMode(); closeDialogs(); toast(enabled ? 'AI 模式已启用，请注意数据会发送至服务商' : '已切换到本地模式');
 });
 $('#clearData').addEventListener('click', () => {
   if (!window.confirm('确定清除此浏览器中保存的货物资料、复核清单及设置？此操作不可撤销。')) return;
+  activeReply?.abort();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
   chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
 });

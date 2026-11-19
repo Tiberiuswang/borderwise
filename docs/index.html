@@ -100,9 +100,14 @@
           <button id="panelForm" class="case-link">填写货物资料 <span>↗</span></button>
         </div>
         <div class="panel-section-head"><div><h3>检查事项</h3></div><span id="checkCount" class="count-badge">—</span></div>
+        <div class="review-progress" id="reviewProgressGroup" hidden>
+          <p id="reviewProgressText" aria-live="polite"></p>
+          <progress id="reviewProgress" aria-label="人工复核进度" max="1" value="0"></progress>
+        </div>
         <div id="checklist" class="checklist">
           <div class="empty-check"><span class="empty-check-icon"><span class="icon" data-icon="check-circle"></span></span><strong>清单将在这里生成</strong></div>
         </div>
+        <button type="button" id="viewReview" class="case-link" hidden>查看完整清单并记录进度 <span aria-hidden="true">↗</span></button>
         <button id="exportReport" class="export-button" disabled><span class="icon" data-icon="download"></span> 导出复核清单 <span>↓</span></button>
         <div class="panel-divider"></div>
         <div class="sources-heading"><div><h3>官方查询入口</h3></div><button id="moreSources">查看全部 ↗</button></div>

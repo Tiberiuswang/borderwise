@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, localAnswer } from '../docs/engine.js';
+import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, getLocalFollowUps, localAnswer } from '../docs/engine.js';
 
 const fields = ['product', 'hs', 'origin', 'exportCountry', 'destination', 'value', 'currency', 'incoterm', 'consignee', 'material', 'transport', 'documents', 'notes'];
 const standard = {
@@ -261,6 +261,62 @@ test('本地问答分类且根据表单变化，不伪装实时查询', () => {
   assert.notEqual(eu, us);
   assert.match(eu, /不能判定/);
   assert.match(us, /不能排除/);
+});
+
+test('明确询问资料缺项时，按表单列出待补和待更正事项', () => {
+  const partial = { ...standard, hs: '12ab', origin: '未知', material: '', documents: '商业发票' };
+  for (const question of ['这批货还缺哪些报关资料？', '哪些货物资料还需要补充？', '报关资料还差些什么？']) {
+    const answer = localAnswer(question, partial);
+    assert.match(answer, /- HS 编码格式需复核/);
+    assert.match(answer, /- 未提供原产地/);
+    assert.match(answer, /- 缺少主要材质/);
+    assert.match(answer, /补充装箱单/);
+    assert.doesNotMatch(answer, /未提供货值|未提供目的地|单证信息缺失/);
+    assert.ok(answer.indexOf('HS 编码格式需复核') < answer.indexOf('缺少主要材质'));
+    assert.equal((answer.match(/未知不等于安全/g) || []).length, 1);
+    assertBoundaries(answer);
+  }
+});
+
+test('资料常见字段已填写时，缺项答复保留进一步核验的事项', () => {
+  const complete = localAnswer('这批货还缺哪些报关资料？', standard);
+  assert.match(complete, /未发现明显缺项/);
+  assert.match(complete, /发货方、出口商和最终用户/);
+  assert.match(complete, /确认实际所需的单证及许可/);
+  assert.doesNotMatch(complete, /^- /m);
+  assertBoundaries(complete);
+  const empty = localAnswer('这批货还缺哪些报关资料？');
+  assert.match(empty, /缺少具体品名/);
+  assert.match(empty, /单证信息缺失/);
+  assertBoundaries(empty);
+});
+
+test('本地追问随资料缺项、已问主题及适用地区变化', () => {
+  const shipment = { ...standard, destination: '德国', hs: '' };
+  const followUps = getLocalFollowUps('怎样核对商业发票？', shipment);
+  assert.equal(followUps.length, 3);
+  assert.equal(new Set(followUps).size, followUps.length);
+  assert.ok(followUps.every(question => question.endsWith('？') && question.length <= 36));
+  assert.ok(followUps.some(question => /还缺哪些报关资料/.test(question)));
+  assert.ok(followUps.some(question => /CBAM/.test(question)));
+  assert.ok(followUps.some(question => /没有 HS 编码/.test(question)));
+  assert.ok(followUps.every(question => !/发票|装箱单|单证/.test(question)));
+  for (const question of followUps) assertBoundaries(localAnswer(question, shipment));
+
+  const rcep = getLocalFollowUps('如何核验 HS 编码和单证？', { ...standard, destination: '日本' });
+  assert.ok(rcep.some(question => /RCEP/.test(question)));
+  assert.ok(rcep.every(question => !/CBAM|HS 编码|单证/.test(question)));
+  const gaps = getLocalFollowUps('这批货还缺哪些报关资料？', { ...standard, documents: '' });
+  assert.ok(gaps.some(question => /核验已填写的 HS 编码/.test(question)));
+  assert.ok(gaps.some(question => /单证清单/.test(question)));
+  assert.ok(gaps.every(question => !/还缺哪些报关资料/.test(question)));
+});
+
+test('空白、无上下文的寒暄以及拒绝请求不会产生追问', () => {
+  assert.deepEqual(getLocalFollowUps('你好', {}), []);
+  for (const question of [null, '', ' ', '怎么伪造原产地？', '请生成报关单']) {
+    assert.deepEqual(getLocalFollowUps(question, EXAMPLE_SHIPMENT), []);
+  }
 });
 
 test('普通多主题问题分别回答，重复关键词不会重复主题，边界只在末尾出现', () => {

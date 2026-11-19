@@ -29,6 +29,22 @@ const FIELDS = ['product', 'hs', 'origin', 'exportCountry', 'destination', 'valu
 const UNKNOWN = /^(?:未知|不详|不清楚|未填写|未提供|未确定|待确认|待定|暂无|无|没有|none|null|n\/?a|unknown|not\s+(?:known|provided)|-+)$/i;
 const WARNING = '未知不等于安全，需人工核验。';
 const BOUNDARY = '本地规则未接入实时海关、制裁名单、CBAM 数据或真实税率，也不进行 HS 归类；未知不等于安全，需人工核验，不能据此认定合规或保证通关。';
+const QUESTION_TOPICS = {
+  safety: /保证|一定|百分之百|是否安全|安全吗|是否合规|合规吗|能通关吗|保证通关|无风险|safe|compliant|guarantee/i,
+  cbam: /cbam|碳关税|碳边境|碳排放/i,
+  rcep: /rcep|自贸协定|优惠原产地|优惠关税/i,
+  hs: /hs|编码|税号|归类|classification/i,
+  origin: /原产地|产地|origin/i,
+  sanctions: /制裁|禁运|名单|出口管制|sanction|embargo/i,
+  duties: /税率|关税|税费|税金|进口税|费用|duty|tariff/i,
+  documents: /发票|装箱单|单证|文件|材料|证明|清单|报关单|invoice|document/i,
+  incoterm: /incoterm|贸易术语|fob|cif|ddp|dap|exw/i,
+  transport: /运输|海运|空运|危险品|电池|物流|shipping|transport/i,
+};
+const GAP_REVIEW_IDS = new Set([
+  'product-vague', 'hs-format', 'value-invalid', 'value-zero',
+  'currency-format', 'incoterm-review', 'documents-incomplete',
+]);
 
 function scalar(value) {
   if (typeof value === 'string') return value.trim();
@@ -127,6 +143,30 @@ function asksEvasion(text) {
     || (badAction.test(t) && subject.test(t));
 }
 
+function asksOfficialDocument(question) {
+  return /(?:生成|制作|开具|出具|伪造|代写|generate|issue|create).{0,18}(?:报关单|原产地证|产地证|官方证书|正式证书|海关证明|customs declaration|certificate of origin)/i.test(question);
+}
+
+function asksShipmentGaps(question) {
+  const shipment = /这批货|货物|货件|报关|申报|表单|资料|信息|字段/;
+  const gaps = /(?:缺(?:少)?|差|补(?:充|齐)?)(?:了|些)?(?:哪些|哪几项|什么)|(?:哪些|哪几项|什么).{0,14}(?:没填|未填|缺失|待补|要补)|缺项|是否齐全|是否完整/;
+  return shipment.test(question) && gaps.test(question);
+}
+
+function shipmentGaps(checks) {
+  return checks.filter(({ id }) => id.endsWith('-missing') || GAP_REVIEW_IDS.has(id));
+}
+
+function describeShipmentGaps(input) {
+  const { checks } = analyzeShipment(input);
+  const gaps = shipmentGaps(checks);
+  const extra = '请另行核实发货方、出口商和最终用户，并向报关专业人员确认实际所需的单证及许可。';
+  if (!gaps.length) return `当前表单的常见资料项未发现明显缺项。请逐项核对真实单证、货物与交易信息的一致性。${extra}`;
+  const ordered = [...gaps.filter(check => check.level === 'high'), ...gaps.filter(check => check.level !== 'high')];
+  const items = ordered.map(({ title, action }) => `- ${title}：${action}`);
+  return ['根据当前表单，可先补充或更正以下事项：', ...items, extra].join('\n');
+}
+
 
 export function analyzeShipment(input = {}) {
   const s = normalize(input);
@@ -190,7 +230,7 @@ export function analyzeShipment(input = {}) {
     const packing = documentMentioned(s.documents, /装箱单|箱单|packing\s*(?:list|slip)/i);
     if (!invoice || !packing) {
       const absent = [!invoice && '商业发票', !packing && '装箱单'].filter(Boolean).join('、');
-      add('documents-incomplete', 'medium', '单证清单有待补充', `所填清单中未明确提到${absent}；是否需要应由具体业务及适用要求决定。`, '核对文件清单和实际资料；必要时准备相应单证，并询问报关行是否需要其他材料。');
+      add('documents-incomplete', 'medium', '单证清单有待补充', `所填清单中未明确提到${absent}；是否需要应由具体业务及适用要求决定。`, `核对现有文件，确认是否需要补充${absent}，并询问报关行是否需要其他材料。`);
     } else add('documents-review', 'info', '单证内容与一致性待核验', '清单中提到发票和装箱单，但本工具未查看文件，也未确定其他必需材料。', '逐份核对名称、数量、金额、币种、交易方和产地；咨询实际需要的许可或证明。');
   }
 
@@ -216,6 +256,42 @@ export function analyzeShipment(input = {}) {
 }
 
 
+export function getLocalFollowUps(question, input = {}) {
+  const q = scalar(question).toLowerCase();
+  if (!q || asksEvasion(q) || asksOfficialDocument(q)) return [];
+
+  const { checks, input: shipment } = analyzeShipment(input);
+  const ids = new Set(checks.map(check => check.id));
+  const asked = new Set(Object.keys(QUESTION_TOPICS).filter(topic => QUESTION_TOPICS[topic].test(q)));
+  if (asksShipmentGaps(q)) asked.add('gaps');
+  const hasShipment = Object.values(shipment).some(provided);
+  const hasGaps = shipmentGaps(checks).length > 0;
+  const questions = [];
+  const suggest = (topic, text, relevant) => {
+    if (relevant && !asked.has(topic)) questions.push(text);
+  };
+
+  suggest('gaps', '这批货还缺哪些报关资料？', hasGaps && (hasShipment || asked.size > 0));
+  suggest('transport', '需要向承运人核实哪些运输条件？', ids.has('goods-review'));
+  suggest('cbam', '如何核对 CBAM 的适用范围？', ids.has('cbam-review'));
+  suggest('rcep', 'RCEP 优惠资格要核对哪些条件？', ids.has('rcep-review'));
+  suggest('hs', provided(shipment.hs) ? '如何核验已填写的 HS 编码？' : '没有 HS 编码时，如何准备归类信息？',
+    provided(shipment.product) || provided(shipment.hs) || asked.has('cbam') || asked.has('documents') || asked.has('gaps'));
+  suggest('origin', '应如何准备原产地核验依据？',
+    provided(shipment.origin) || provided(shipment.exportCountry) || asked.has('hs') || asked.has('rcep') || asked.has('gaps'));
+  suggest('documents', ids.has('documents-review') ? '如何核对单证与实物是否一致？' : '报关单证清单应列出哪些常见文件？',
+    hasShipment || asked.has('gaps') || asked.has('transport') || asked.has('incoterm') || asked.has('hs'));
+  suggest('sanctions', '怎样核验交易方和适用的制裁名单？',
+    provided(shipment.consignee) || asked.has('origin') || asked.has('transport'));
+  suggest('incoterm', '如何核对贸易术语和交付责任？',
+    provided(shipment.incoterm) || asked.has('transport') || asked.has('duties'));
+  suggest('duties', '查询税费前要核对哪些信息？',
+    provided(shipment.destination) && (provided(shipment.value) || asked.has('hs') || asked.has('incoterm')));
+
+  return questions.slice(0, 3);
+}
+
+
 export function localAnswer(question, input = {}) {
   const q = scalar(question).toLowerCase();
   const s = normalize(input);
@@ -223,44 +299,46 @@ export function localAnswer(question, input = {}) {
   if (asksEvasion(q)) {
     return `不能帮助通过转运、隐瞒交易方或虚报原产地来规避制裁或出口管制。请如实记录生产和运输事实，暂停可疑交易，并向适用主管机关或专业人士核实。\n\n${BOUNDARY}`;
   }
-  if (/(?:生成|制作|开具|出具|伪造|代写|generate|issue|create).{0,18}(?:报关单|原产地证|产地证|官方证书|正式证书|海关证明|customs declaration|certificate of origin)/i.test(q)) {
+  if (asksOfficialDocument(q)) {
     return `不能生成或冒充正式报关单、官方证书或原产地证明。可先整理真实交易和生产记录，再由有权主体按适用流程提交或申请。\n\n${BOUNDARY}`;
   }
 
   const answers = [];
-  if (/保证|一定|百分之百|是否安全|安全吗|是否合规|合规吗|能通关吗|保证通关|无风险|safe|compliant|guarantee/i.test(q)) {
+  const asksGaps = asksShipmentGaps(q);
+  if (QUESTION_TOPICS.safety.test(q)) {
     answers.push('不能保证通关，也不能仅凭本地检查认定安全或合规。请先补齐商品、交易方、原产地和文件信息，再向报关专业人士与适用主管机关核验。');
   }
-  if (/cbam|碳关税|碳边境|碳排放/i.test(q)) {
+  if (asksGaps) answers.push(describeShipmentGaps(s));
+  if (QUESTION_TOPICS.cbam.test(q)) {
     const hint = matchesCountry(s.destination, EU) ? '当前目的地名称被初步识别为欧盟或成员国。' : provided(s.destination) ? '当前目的地未被本地规则识别为欧盟；这不能排除其他地点或其他要求。' : '目的地尚未提供。';
     answers.push(`${hint}仅凭目的地、品名或 HS 不能判定 CBAM 是否适用。请与进口方核对实际进口地点、商品编码、数量、原产地及现行欧盟官方规则。`);
   }
-  if (/rcep|自贸协定|优惠原产地|优惠关税/i.test(q)) {
+  if (QUESTION_TOPICS.rcep.test(q)) {
     answers.push('RCEP 或其他协定优惠是否适用需要逐案判定，不能根据出口地或一张证书直接认定。请核对有关国家或地区、协定生效、具体商品原产地规则、运输条件和证明要求，再向主管机关咨询。');
   }
-  if (/hs|编码|税号|归类|classification/i.test(q)) {
+  if (QUESTION_TOPICS.hs.test(q)) {
     const hint = provided(s.hs) ? `已填写编码：${s.hs}；本工具只检查输入格式，不确认编码存在或分类正确。` : '尚未填写 HS 编码；本工具不自动归类。';
     answers.push(`${hint}请整理品名、用途、规格和材质，请专业人员按申报地当前税则核验。`);
   }
-  if (/原产地|产地|origin/i.test(q)) {
+  if (QUESTION_TOPICS.origin.test(q)) {
     const hint = provided(s.origin) ? `表单所填原产地为“${s.origin}”，未经核实。` : '原产地尚未填写，不能按出口地推定。';
     answers.push(`${hint}请保存真实的生产及采购记录，按适用规则确认原产资格与证明，不能通过改变运输路线或文件来虚报产地。`);
   }
-  if (/制裁|禁运|名单|出口管制|sanction|embargo/i.test(q)) {
+  if (QUESTION_TOPICS.sanctions.test(q)) {
     answers.push('本工具没有联网筛查制裁或出口管制名单，不能判断交易方是否受限。请核实收发货方、最终用户和用途，并人工查阅适用法域的官方清单及相关措施；联合国名单并非全部适用名单。');
   }
-  if (/税率|关税|税费|税金|进口税|费用|duty|tariff/i.test(q)) {
+  if (QUESTION_TOPICS.duties.test(q)) {
     answers.push('本工具不提供实时税率、汇率或税费计算。请先核验目的地、商品编码、原产地、货值和贸易术语，再向目的地海关或专业报关人员查询适用税费与估价规则。');
   }
-  if (/发票|装箱单|单证|文件|材料|证明|清单|报关单|invoice|document/i.test(q)) {
+  if (!asksGaps && QUESTION_TOPICS.documents.test(q)) {
     const hint = provided(s.documents) ? `表单已填写单证清单，但未核实实际文件：${s.documents}。` : '表单尚未列出可核对的单证。';
     answers.push(`${hint}可先准备真实合同、商业发票和装箱资料，核对交易方、品名、数量、金额和产地，再确认实际所需许可或证明；这里只提供待办，不出具正式文件。`);
   }
-  if (/incoterm|贸易术语|fob|cif|ddp|dap|exw/i.test(q)) {
+  if (QUESTION_TOPICS.incoterm.test(q)) {
     const hint = provided(s.incoterm) ? `表单填写的贸易术语为“${s.incoterm}”。` : '表单尚未填写贸易术语。';
     answers.push(`${hint}请核对合同采用的术语版本和指定地点，并与交易方确认运输、保险、费用及报关分工。`);
   }
-  if (/运输|海运|空运|危险品|电池|物流|shipping|transport/i.test(q)) {
+  if (QUESTION_TOPICS.transport.test(q)) {
     answers.push('请根据实际运输方式、商品规格及包装情况向承运人确认运输条件、所需检测和单证。涉及电池或化学品时，尤其需要提供真实技术资料；关键词本身不能判定危险品分类。');
   }
   if (!answers.length) {

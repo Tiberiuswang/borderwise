@@ -86,7 +86,7 @@ test('sends Zhipu (OpenAI-compatible) request and returns only answer', async ()
     assert.equal(init.headers.Authorization, `Bearer ${env.OPENAI_API_KEY}`);
     assert.equal(init.body.includes(env.APP_TOKEN), false);
     const sent = JSON.parse(init.body);
-    assert.equal(sent.model, 'glm-4.7-flash');
+    assert.equal(sent.model, 'glm-5.3-flash');
     assert.equal('thinking' in sent, false);
     assert.equal(sent.stream, false);
     assert.match(sent.messages[0].content, /不得伪造/);
