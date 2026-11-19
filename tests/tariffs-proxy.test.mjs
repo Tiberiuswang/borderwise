@@ -44,3 +44,19 @@ test('US proxy cancels a response that exceeds the byte limit without a content 
   assert.equal(response.status, 502);
   assert.equal(canceled, true);
 });
+
+test('US proxy falls back to the latest release linked on the official USITC archive', async t => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async url => {
+    if (String(url).startsWith('https://hts.usitc.gov/')) return new Response(null, { status: 403 });
+    if (String(url).endsWith('/hts/archive/list')) {
+      return new Response('<a href="/sites/default/files/tata/hts/hts_2026_revision_23_json.json">JSON</a>');
+    }
+    return Response.json([{ htsno: '6109.10.00', general: '16.5%' }]);
+  });
+  const response = await onRequestGet({ request: requestFor('6109100004') });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('X-Borderwise-Tariff-Edition'), '2026 HTS Revision 23');
+  assert.deepEqual(await response.json(), [{ htsno: '6109.10.00', general: '16.5%' }]);
+  assert.equal(String(fetchMock.mock.calls.at(-1).arguments[0]),
+    'https://www.usitc.gov/sites/default/files/tata/hts/hts_2026_revision_23_json.json');
+});

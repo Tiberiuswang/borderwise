@@ -63,6 +63,13 @@ function renderTariffRows(result, threshold, queryCode) {
   const fragment = document.createDocumentFragment();
   const fetched = result.fetchedAt ? ' · ' + new Date(result.fetchedAt).toLocaleString('zh-CN') : '';
   fragment.append(element('p', result.sourceName + fetched, 'planning-help'));
+  if (result.edition) {
+    const archive = element('a', 'USITC 官方发布档案 · ' + result.edition + ' ↗', 'case-link');
+    archive.href = 'https://www.usitc.gov/harmonized_tariff_information/hts/archive/list';
+    archive.target = '_blank';
+    archive.rel = 'noopener noreferrer';
+    fragment.append(archive);
+  }
   for (const row of result.rows) {
     const item = element('article', '', 'planning-result');
     const head = element('div', '', 'planning-result-head');
@@ -336,6 +343,7 @@ export function createTradePlanner(initialShipment = {}) {
     });
     logisticsResults.append(renderComparison(result, basis, demo));
     logisticsStatus.textContent = fxNote || '已比较所填方案。';
+    if (!root.hidden) logisticsStatus.scrollIntoView({ block: 'nearest' });
     if (fx) {
       const source = element('a', '查看参考汇率来源 ↗', 'case-link');
       source.href = FX_SOURCE.url;

@@ -133,6 +133,7 @@ export async function lookupTariff({ destination, code: input } = {}, { fetchImp
     sourceName: SOURCE_NAMES[country] || '',
     sourceUrl: officialUrl(country, valid ? code : ''),
     fetchedAt: null,
+    edition: '',
     rows: [],
     totalRows: 0,
   };
@@ -140,7 +141,7 @@ export async function lookupTariff({ destination, code: input } = {}, { fetchImp
   if (!valid) return { ...result, status: 'invalid' };
 
   try {
-    const timeout = AbortSignal.timeout(10_000);
+    const timeout = AbortSignal.timeout(country === 'US' ? 24_000 : 10_000);
     const response = await fetchImpl(lookupUrl(country, code), {
       credentials: 'omit',
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
@@ -153,7 +154,8 @@ export async function lookupTariff({ destination, code: input } = {}, { fetchImp
     const candidates = country === 'US' ? code.length === 6 : code.length !== 10;
     const matches = country === 'US' ? usMatches(payload, code) : ukMatches(payload, code);
     const status = !matches.length ? 'not-found' : candidates ? 'candidates' : 'found';
-    return { ...result, fetchedAt, rows: matches.slice(0, MAX_ROWS), totalRows: matches.length, status };
+    const edition = country === 'US' ? text(response.headers.get('X-Borderwise-Tariff-Edition')) : '';
+    return { ...result, fetchedAt, edition, rows: matches.slice(0, MAX_ROWS), totalRows: matches.length, status };
   } catch {
     return { ...result, status: 'unavailable' };
   }
