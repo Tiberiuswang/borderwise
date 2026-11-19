@@ -22,6 +22,7 @@
     <nav class="navigation" aria-label="主菜单">
       <button class="nav-item active" id="navChat" aria-current="page"><span class="icon" data-icon="message"></span>合规助手<span class="nav-indicator"></span></button>
       <button class="nav-item" id="navForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
+      <button class="nav-item" id="navPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
       <button class="nav-item" id="navSources"><span class="icon" data-icon="globe"></span>官方资料库<span class="nav-external">↗</span></button>
     </nav>
     <div class="sidebar-divider"></div>
@@ -98,6 +99,7 @@
           <div class="case-card-head"><span class="mini-icon"><span class="icon" data-icon="layers"></span></span><span class="case-status" id="caseStatus"><span></span> 待开始</span></div>
           <h3 id="caseProduct">新的分析</h3><p id="caseDescription">尚未填写货物资料</p>
           <button id="panelForm" class="case-link">填写货物资料 <span>↗</span></button>
+          <button id="panelPlanning" class="case-link">查关税与比较运费 <span aria-hidden="true">↗</span></button>
         </div>
         <div class="panel-section-head"><div><h3>检查事项</h3></div><span id="checkCount" class="count-badge">—</span></div>
         <div class="review-progress" id="reviewProgressGroup" hidden>
@@ -138,6 +140,88 @@
   </div><div class="form-hint"><span class="icon" data-icon="shield"></span> 默认仅在浏览器内处理；如启用 AI 对话，相关资料会发送至你配置的服务。</div><div class="dialog-actions"><button type="button" class="secondary-button" id="fillExample">填入演示数据</button><button type="submit" class="primary-button">生成复核清单 <span>→</span></button></div></form>
 </section>
 
+<section class="dialog planning-dialog" id="planningDialog" role="dialog" aria-modal="true" aria-labelledby="planningTitle" hidden>
+  <div class="dialog-header">
+    <div><h2 id="planningTitle">关税与运输比价</h2><p id="planningContext">按目的市场查税率，用同一票货的报价对比运输方案。</p></div>
+    <button class="close-button" data-close aria-label="关闭">×</button>
+  </div>
+  <div class="planning-tabs" role="group" aria-label="选择分析工具">
+    <button type="button" data-planning-tab="tariffs" aria-pressed="true" aria-controls="tradeTariffSection">目的地关税</button>
+    <button type="button" data-planning-tab="logistics" aria-pressed="false" aria-controls="tradeLogisticsSection">运输方案与风险</button>
+  </div>
+  <section id="tradeTariffSection" aria-labelledby="tradeTariffTitle">
+    <h3 id="tradeTariffTitle">目的地关税</h3>
+    <p class="planning-help">美国和英国（大不列颠）支持联网查询。先用 HS 6 位码找候选，再核对进口国的完整税则编码。基础税率需结合原产地、协定、附加税和申报日期复核。</p>
+    <form id="tradeTariffForm">
+      <div class="form-grid planning-fields">
+        <label>进口市场
+          <select name="destination">
+            <option value="">选择目的市场</option>
+            <option value="US">美国</option>
+            <option value="GB">英国（大不列颠）</option>
+            <option value="EU">欧盟</option>
+            <option value="OTHER">其他市场</option>
+          </select>
+        </label>
+        <label>HS / 进口税则编码 <input name="code" inputmode="decimal" maxlength="20" placeholder="如 6109.10 或 6109100010"></label>
+        <label>税率关注线（%） <input name="threshold" type="number" min="0" max="1000" step="any" value="10"></label>
+      </div>
+      <p class="planning-help">关注线由你设定。联网时仅发送所选市场与编码。所得税率用于筛查，实际税额仍需核验。</p>
+      <div class="planning-actions">
+        <button class="primary-button" type="submit" id="lookupTariff">联网查询</button>
+        <a class="case-link" id="tariffOfficialLink" href="https://trade.ec.europa.eu/access-to-markets/en/home" target="_blank" rel="noopener noreferrer">打开官方查询 ↗</a>
+      </div>
+    </form>
+    <div id="tariffStatus" class="planning-status" role="status"></div>
+    <div id="tariffResults" class="planning-results"></div>
+  </section>
+  <section id="tradeLogisticsSection" aria-labelledby="tradeLogisticsTitle" hidden>
+    <h3 id="tradeLogisticsTitle">运输方案与风险</h3>
+    <p class="planning-help">将同一货量、同一起讫点的承运商报价录入下方。报价与货物明细在浏览器内比较，跨币种时仅联网获取所选币种的参考汇率。</p>
+    <form id="tradeLogisticsForm">
+      <div class="form-grid planning-fields">
+        <label>起点 <input name="from" maxlength="120" placeholder="港口、机场或城市"></label>
+        <label>终点 <input name="to" maxlength="120" placeholder="港口、机场或城市"></label>
+        <label>共同货量与计费单位 <input name="load" maxlength="120" placeholder="如 1 × 40HQ 或 500 kg / 2 m³"></label>
+        <label>最晚到达（天，可选） <input name="deliveryLimitDays" type="number" min="1" step="1"></label>
+        <label>比较币种 <select name="baseCurrency"></select></label>
+      </div>
+      <div class="planning-sources">
+        <a href="https://www.maersk.com/support/faqs/how-to-lookup-rates" target="_blank" rel="noopener noreferrer">Maersk 海运询价 ↗</a>
+        <a href="https://www.freightos.com/freight-resources/freight-rate-calculator-free-tool/" target="_blank" rel="noopener noreferrer">Freightos 运价参考 ↗</a>
+      </div>
+      <div id="quoteOptions" class="quote-options"></div>
+      <div class="planning-actions">
+        <button type="button" class="secondary-button" id="addQuote">添加方案</button>
+        <button type="button" class="secondary-button" id="fillPlanningExample">填入演示报价</button>
+        <button type="submit" class="primary-button" id="compareQuotes">比较成本与时效</button>
+      </div>
+    </form>
+    <div id="logisticsStatus" class="planning-status" role="status"></div>
+    <div id="logisticsResults" class="planning-results"></div>
+  </section>
+</section>
+
+<template id="quoteTemplate">
+  <fieldset class="quote-option">
+    <legend></legend>
+    <div class="form-grid planning-fields">
+      <label>承运商 / 方案名称 <input data-quote="label" maxlength="100" placeholder="可选"></label>
+      <label>运输方式 <select data-quote="mode"></select></label>
+      <label>报价范围 <select data-quote="scope"></select></label>
+      <label>报价币种 <select data-quote="currency"></select></label>
+      <label>主运费 <input data-quote="freight" type="number" min="0" step="any"></label>
+      <label>附加费用 <input data-quote="extras" type="number" min="0" step="any" placeholder="未知留空，确认无附加费填 0"></label>
+      <label>运输时效（天） <input data-quote="transitDays" type="number" min="0" step="any"></label>
+      <label>中转 / 交接次数 <input data-quote="handoffs" type="number" min="0" step="1"></label>
+      <label>报价有效期至 <input data-quote="expires" type="date"></label>
+      <label class="quote-checkbox"><input data-quote="backup" type="checkbox"> 已确认备用路线或运力</label>
+    </div>
+    <p class="planning-help">附加费按同一报价范围汇总，例如提送货、码头、燃油和保险。关税、进口税和未确认费用单独核验。</p>
+    <button type="button" class="case-link quote-remove">移除此方案</button>
+  </fieldset>
+</template>
+
 <section class="dialog compact-dialog" id="sourcesDialog" role="dialog" aria-modal="true" aria-labelledby="sourcesTitle" hidden>
   <div class="dialog-header"><div><h2 id="sourcesTitle">官方资料库</h2><p>这些是官方查询入口，需结合商品、交易主体和时间逐项核实。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
   <div class="resource-list">
@@ -146,7 +230,7 @@
     <a href="https://ofac.treasury.gov/sanctions-list-service" target="_blank" rel="noopener noreferrer"><span><strong>美国 OFAC 制裁名单服务</strong><small>官方名单数据与查询入口</small></span><b>↗</b></a>
     <a href="https://online.customs.gov.cn/static/pages/mySearch.html" target="_blank" rel="noopener noreferrer"><span><strong>中国海关政务服务查询</strong><small>税则、税率及归类决定等查询入口</small></span><b>↗</b></a>
     <a href="https://www.wcoomd.org/en/topics/nomenclature/overview/what-is-the-harmonized-system.aspx" target="_blank" rel="noopener noreferrer"><span><strong>世界海关组织 HS 介绍</strong><small>了解协调制度；具体编码需查询适用税则</small></span><b>↗</b></a>
-  </div><div class="notice-box">本站不自动查询这些网站，不代表上述来源已经核验当前货物。法律法规可能随时变化。</div>
+  </div><div class="notice-box">这里汇总人工复核的官方入口。支持的目的地税则可在「关税与运输比价」发起联网查询。</div>
 </section>
 
 <section class="dialog compact-dialog" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>

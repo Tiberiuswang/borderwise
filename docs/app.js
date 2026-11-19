@@ -1,5 +1,6 @@
 import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, getLocalFollowUps, localAnswer } from './engine.js';
 import { AI_CONFIG } from './ai-config.js';
+import { createTradePlanner } from './planning.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -27,7 +28,8 @@ let chatHistory = [];
 const MAX_HISTORY = 8;
 const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
-const dialogIds = ['caseDialog', 'sourcesDialog', 'settingsDialog'];
+const dialogIds = ['caseDialog', 'planningDialog', 'sourcesDialog', 'settingsDialog'];
+const planner = createTradePlanner(shipment);
 const mobileLayout = matchMedia('(max-width: 760px)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -82,6 +84,10 @@ function readFormValues() {
   return Object.fromEntries([...new FormData($('#caseForm')).entries()].map(([key, value]) => [key, String(value).trim()]));
 }
 function showForm() { setFormValues(shipment); openDialog('caseDialog'); }
+function showPlanning(tab = 'tariffs') {
+  planner.activate(tab);
+  openDialog('planningDialog');
+}
 function showSources() { openDialog('sourcesDialog'); }
 function showSettings() {
   const form = $('#settingsForm');
@@ -274,6 +280,26 @@ function addFollowUps(node, items) {
   }
   node.querySelector('.message-body').append(wrap);
 }
+
+function addPlanningLinks(node, question) {
+  const links = [];
+  if (/关税|税率|进口税|tariff/i.test(question)) links.push(['tariffs', '联网查关税']);
+  if (/运费|运价|多式联运|运输方案|运输成本|航运费用|供应链风险|freight|multimodal/i.test(question)) {
+    links.push(['logistics', '比较运输报价']);
+  }
+  if (!links.length) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'follow-ups planning-message-actions';
+  for (const [tab, text] of links) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = text;
+    button.addEventListener('click', () => showPlanning(tab));
+    wrap.append(button);
+  }
+  node.querySelector('.message-body').append(wrap);
+}
+
 function showLocalAnswer(message, question, currentShipment, fallback = '') {
   message.mode.textContent = '本地助手';
   message.text.textContent = localAnswer(question, currentShipment);
@@ -283,6 +309,7 @@ function showLocalAnswer(message, question, currentShipment, fallback = '') {
     note.textContent = fallback;
     message.text.prepend(note);
   }
+  addPlanningLinks(message.node, question);
   addFollowUps(message.node, getLocalFollowUps(question, currentShipment));
 }
 
@@ -325,6 +352,7 @@ async function sendQuestion(question) {
     note.className = 'ai-note';
     note.textContent = '模型输出可能出错，未核验实时法规；请查看官方来源并由专业人员复核。';
     message.text.append(note);
+    addPlanningLinks(message.node, content);
     addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
     chatHistory.push({ role: 'user', content }, { role: 'assistant', content: body });
     chatHistory = chatHistory.slice(-MAX_HISTORY);
@@ -365,9 +393,12 @@ $('#newTask').addEventListener('click', () => {
   if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
   activeReply?.abort();
   chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
+  planner.setShipment(shipment);
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
 $('#navForm').addEventListener('click', showForm); $('#attachCase').addEventListener('click', showForm); $('#panelForm').addEventListener('click', showForm); $('#historyButton').addEventListener('click', showForm);
+$('#navPlanning').addEventListener('click', () => showPlanning());
+$('#panelPlanning').addEventListener('click', () => showPlanning());
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
 $('#mobileMenu').addEventListener('click', () => {
@@ -405,6 +436,7 @@ $('#caseForm').addEventListener('submit', event => {
     chatHistory = [];
   }
   shipment = next.input;
+  if (!sameShipment) planner.setShipment(shipment);
   report = next;
   setStored(STORAGE.shipment, shipment);
   setStored(STORAGE.report, report);
@@ -446,6 +478,7 @@ $('#clearData').addEventListener('click', () => {
   activeReply?.abort();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
   chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  planner.setShipment(shipment);
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
