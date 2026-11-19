@@ -1,0 +1,133 @@
+.app-shell:not(:has(#workspace:target)),
+body:has(#workspace:target) .entrance {
+  display: none;
+}
+
+.entrance {
+  --cream: #fffdf3;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  padding: clamp(23px, 4vw, 60px) clamp(24px, 6vw, 104px) clamp(20px, 4vw, 52px);
+  color: var(--cream);
+  background: #142017;
+}
+
+.entrance-image {
+  position: absolute;
+  z-index: -2;
+  inset: -5% 0 0;
+}
+
+.entrance-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 61%;
+}
+
+.entrance::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(90deg, #09120ccb, #101c124d 41%, transparent 68%),
+    linear-gradient(0deg, #0a140ce6, #0b151155 42%, transparent 68%),
+    linear-gradient(180deg, #0a130ca8, transparent 29%);
+  content: "";
+}
+
+.entrance-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 11px;
+  font-size: clamp(19px, 2.1vw, 29px);
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.entrance-brand img { width: 40px; height: 40px; object-fit: contain; }
+.entrance-brand > span > span { color: #e1e5c4; }
+
+.entrance-copy {
+  align-self: end;
+  justify-self: start;
+  margin-block: 58px clamp(22px, 5vh, 48px);
+  animation: reveal-entrance 420ms ease-out both;
+}
+
+.entrance-copy h1 {
+  font-size: clamp(32px, 4.6vw, 66px);
+  font-weight: 530;
+  line-height: 1.25;
+  letter-spacing: .075em;
+}
+
+.entrance-copy h1:focus { outline: none; }
+
+.entrance-copy p {
+  margin-top: clamp(11px, 1.5vw, 19px);
+  color: #f2f4e8;
+  font-size: clamp(12px, 1.2vw, 15px);
+  letter-spacing: .1em;
+}
+
+.entrance-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 26px;
+  min-width: 178px;
+  min-height: 51px;
+  margin-top: clamp(22px, 3vw, 36px);
+  padding: 10px 15px 10px 17px;
+  border: 1px solid #fffdf3a6;
+  border-radius: 3px;
+  color: var(--cream);
+  background: #10201660;
+  font-size: 14px;
+  font-weight: 550;
+  letter-spacing: .08em;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.entrance-button span { font-size: 18px; line-height: 1; }
+.entrance-button:hover { color: #1e2b21; background: var(--cream); }
+.entrance-button:focus-visible { outline-color: var(--cream); }
+
+.entrance-caption {
+  justify-self: end;
+  color: #edf0e2;
+  font-size: 11px;
+  letter-spacing: .15em;
+}
+
+@keyframes reveal-entrance {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  .entrance { padding-inline: 25px; }
+  .entrance-brand img { width: 33px; height: 33px; }
+  .entrance-image img { object-position: 50% 50%; }
+  .entrance::after {
+    background: linear-gradient(0deg, #08130de8 0%, #08130dbb 23%, transparent 54%),
+      linear-gradient(180deg, #09130d9c, transparent 28%);
+  }
+
+  .entrance-copy h1 { font-size: clamp(26px, 8.2vw, 43px); letter-spacing: .07em; }
+  .entrance-copy { margin-bottom: 27px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entrance-copy { animation: none; }
+  .entrance-button { transition: none; }
+}

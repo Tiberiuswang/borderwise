@@ -101,7 +101,7 @@ a { color: inherit; text-decoration: none; }
   background: #304438;
 }
 
-.brand-mark svg { width: 23px; height: 23px; }
+.brand-mark img { display: block; width: 30px; height: 30px; object-fit: contain; }
 .brand strong { display: block; color: #f5f7ed; font-size: 21px; letter-spacing: -.045em; line-height: 1.15; }
 .brand-dot { color: var(--accent); }
 .brand small { display: block; margin-top: 3px; color: #bdcbb8; font-size: 10px; letter-spacing: .12em; }
@@ -247,7 +247,7 @@ a { color: inherit; text-decoration: none; }
 .hero h1 span { color: #dce9b8; }
 .hero-summary { max-width: 27em; margin-top: 18px; color: #edf2e4; font-size: clamp(13px, 1.1vw, 15px); }
 .hero-caption { position: absolute; right: 16px; bottom: 14px; }
-.hero-caption a {
+.hero-caption > span {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -261,8 +261,6 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: .07em;
 }
 
-.hero-caption a:hover { background: var(--forest-deep); text-decoration: underline; }
-.hero-caption a:focus-visible { outline-color: var(--sprout); }
 
 .quick-start { margin-top: 23px; }
 .quick-start h2 { margin-bottom: 11px; font-size: 14px; font-weight: 750; }
@@ -689,8 +687,6 @@ a { color: inherit; text-decoration: none; }
 
 .toast.show { padding: 10px 14px; border-radius: 8px; box-shadow: 0 7px 20px #23372f35; }
 
-.photo-credit { margin-top: 16px; color: var(--muted); font-size: 11px; }
-.photo-credit a { text-decoration: underline; text-underline-offset: 2px; }
 
 .planning-dialog { width: min(960px, calc(100% - 28px)); }
 .planning-tabs {
@@ -838,7 +834,7 @@ a { color: inherit; text-decoration: none; }
   .hero h1 { font-size: clamp(29px, 8.4vw, 42px); }
   .hero-summary { max-width: 24em; margin-top: 13px; }
   .hero-caption { right: 10px; bottom: 9px; }
-  .hero-caption a { min-height: 28px; }
+  .hero-caption > span { min-height: 28px; }
   .quick-start { margin-top: 17px; }
   .suggestions { grid-template-columns: 1fr; gap: 6px; }
   .suggestion { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; padding: 7px 10px; }

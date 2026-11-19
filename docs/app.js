@@ -482,3 +482,11 @@ $('#clearData').addEventListener('click', () => {
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
+
+window.addEventListener('hashchange', () => {
+  const inWorkspace = location.hash === '#workspace';
+  if (!inWorkspace) closeDialogs(false);
+  const heading = inWorkspace ? $('#workspace') : $('#entranceTitle');
+  heading.focus({ preventScroll: true });
+  window.scrollTo(0, 0);
+});
