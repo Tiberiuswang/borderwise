@@ -58,7 +58,7 @@ body:has(#workspace:target) .entrance {
   letter-spacing: -.045em;
 }
 
-.entrance-brand > span > span { color: #d7e1c6; }
+.entrance-brand > span > span { color: var(--accent); }
 .entrance-emblem {
   display: grid;
   flex: none;
@@ -66,7 +66,7 @@ body:has(#workspace:target) .entrance {
   width: 48px;
   height: 48px;
   padding: 0;
-  border: 1px solid #fff1d96b;
+  border: 1px solid #e4bd726b;
   border-radius: 3px;
   background: #14251675;
   cursor: grab;
