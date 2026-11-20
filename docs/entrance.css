@@ -140,6 +140,12 @@ body:has(#workspace:target) .entrance {
   .entrance-copy { margin-top: 105px; }
 }
 
+@media (max-width: 700px) and (max-height: 430px) {
+  .entrance { padding-block: 16px 22px; }
+  .entrance-copy { margin-top: 48px; }
+  .entrance-copy h1 { font-size: 38px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .entrance-image img, .entrance-button { transition: none; }
 }
