@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#203027">
+  <meta name="theme-color" content="#2b2119">
   <meta name="description" content="Borderwise 跨境合规工作台：整理报关资料，生成谨慎的人工复核清单。">
   <title>Borderwise · 跨境合规工作台</title>
   <link rel="stylesheet" href="./styles.css">
@@ -13,18 +13,19 @@
 <body>
 <main class="entrance" id="entrance" aria-labelledby="entranceTitle">
   <div class="entrance-image" aria-hidden="true">
-    <img src="./assets/saihoji-entrance.webp" alt="" width="994" height="1280" fetchpriority="high">
+    <img src="./assets/river-entrance.webp" alt="" width="1136" height="678" fetchpriority="high">
   </div>
   <div class="entrance-brand">
-    <img src="./assets/chrysanthemum.png" alt="" width="40" height="40">
+    <button class="entrance-emblem" type="button" aria-label="回弹菊花标记">
+      <img src="./assets/chrysanthemum.png" alt="" width="40" height="40" draggable="false">
+    </button>
     <span>borderwise<span>.</span></span>
   </div>
   <div class="entrance-copy">
-    <h1 id="entranceTitle" tabindex="-1">跨境合规工作台</h1>
+    <h1 id="entranceTitle" tabindex="-1">跨境合规<br>工作台</h1>
     <p>报关资料检查 · 关税查询 · 运输比价</p>
     <a class="entrance-button" href="#workspace">进入工作台 <span aria-hidden="true">→</span></a>
   </div>
-  <p class="entrance-caption">京都 · 西芳寺</p>
 </main>
 <div class="app-shell">
   <a class="skip-link" href="#workspace">跳到主要内容</a>
@@ -62,33 +63,46 @@
         <div class="conversation-inner">
           <div class="intro" id="intro">
             <div class="hero">
-              <div class="hero-image">
-                <img src="./assets/saihoji-entrance.webp" alt="" width="994" height="1280" loading="lazy">
-              </div>
               <div class="hero-content">
-                <p class="hero-kicker">跨境合规工作台</p>
-                <h1>让每一次跨境<br><span>更有把握。</span></h1>
-                <p class="hero-summary">从货物资料出发，梳理报关前的待核验事项。</p>
+                <h1>出口合规助手</h1>
+                <p class="hero-summary">从货物资料出发，整理报关前需要复核的事项。</p>
               </div>
-              <div class="hero-caption">
-                <span>京都 · 西芳寺</span>
+              <div class="hero-image">
+                <img src="./assets/river-entrance.webp" alt="" width="1136" height="678" loading="lazy">
               </div>
             </div>
+            <section class="workbench-tools" aria-labelledby="workbenchToolsTitle">
+              <h2 id="workbenchToolsTitle">工作台工具</h2>
+              <div class="workbench-tool-list">
+                <button class="workbench-tool" type="button" id="toolForm">
+                  <span class="icon" data-icon="file"></span>
+                  <span><strong>报关资料检查</strong><small>生成货物复核清单</small></span>
+                  <span class="tool-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button class="workbench-tool" type="button" id="toolPlanning">
+                  <span class="icon" data-icon="route"></span>
+                  <span><strong>关税与运输比价</strong><small>查税则，比较运费和时效</small></span>
+                  <span class="tool-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button class="workbench-tool" type="button" id="toolSources">
+                  <span class="icon" data-icon="globe"></span>
+                  <span><strong>官方资料库</strong><small>打开法规与海关查询入口</small></span>
+                  <span class="tool-arrow" aria-hidden="true">↗</span>
+                </button>
+              </div>
+            </section>
             <section class="quick-start" aria-labelledby="quickStartTitle">
               <h2 id="quickStartTitle">快速提问</h2>
               <div class="suggestions">
                 <button class="suggestion" type="button" data-question="我准备把商品出口到德国，报关前需要检查哪些材料？">
-                  <span class="suggestion-icon"><span class="icon" data-icon="package"></span></span>
                   <strong>出口前资料检查</strong>
                   <span class="suggest-arrow" aria-hidden="true">↗</span>
                 </button>
                 <button class="suggestion" type="button" data-question="出口到欧盟时，如何核验 HS 编码与 CBAM 是否适用？">
-                  <span class="suggestion-icon"><span class="icon" data-icon="search"></span></span>
                   <strong>编码与规则核验</strong>
                   <span class="suggest-arrow" aria-hidden="true">↗</span>
                 </button>
                 <button class="suggestion" type="button" data-question="如何核实原产地、制裁名单与潜在物流风险？">
-                  <span class="suggestion-icon"><span class="icon" data-icon="route"></span></span>
                   <strong>跨境风险排查</strong>
                   <span class="suggest-arrow" aria-hidden="true">↗</span>
                 </button>
@@ -262,5 +276,6 @@
 </section>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="./app.js"></script>
+<script type="module" src="./entrance.js"></script>
 </body>
 </html>

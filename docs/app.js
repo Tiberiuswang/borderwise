@@ -399,6 +399,9 @@ $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').
 $('#navForm').addEventListener('click', showForm); $('#attachCase').addEventListener('click', showForm); $('#panelForm').addEventListener('click', showForm); $('#historyButton').addEventListener('click', showForm);
 $('#navPlanning').addEventListener('click', () => showPlanning());
 $('#panelPlanning').addEventListener('click', () => showPlanning());
+$('#toolForm').addEventListener('click', showForm);
+$('#toolPlanning').addEventListener('click', () => showPlanning());
+$('#toolSources').addEventListener('click', showSources);
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
 $('#mobileMenu').addEventListener('click', () => {
