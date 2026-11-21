@@ -442,7 +442,7 @@ async function sendQuestion(question) {
     const { body, followUps } = splitFollowUps(answer.trim());
     if (!body) throw new Error('AI 服务未返回有效内容。');
     const turn = { question: savedQuestion, answer: body, mode: 'ai', scope: url, steps: payload.steps, sources: payload.sources };
-    if (!sessionStore.append(turn)) throw new Error('AI 服务未返回有效内容。');
+    if (!sessionStore.append(turn, token)) throw new Error('AI 服务未返回有效内容。');
     showModelAnswer(message, sessionStore.turns().at(-1));
     addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
   } catch {

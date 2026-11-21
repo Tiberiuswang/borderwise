@@ -58,14 +58,17 @@ function normalizeSource(source) {
   };
 }
 
-function normalizeTurn(turn) {
+function normalizeTurn(turn, token = '') {
   const question = boundedText(turn?.question, MAX_QUESTION_LENGTH);
   const answer = boundedText(turn?.answer, MAX_ANSWER_LENGTH);
   const mode = turn?.mode;
   if (!question || !answer || (mode !== 'local' && mode !== 'ai')) return null;
   const scope = mode === 'ai' ? endpointScope(turn.scope) : '';
-  const steps = Array.isArray(turn.steps) ? turn.steps.slice(0, 12).map(normalizeStep).filter(Boolean) : [];
-  const sources = Array.isArray(turn.sources) ? turn.sources.slice(0, 8).map(normalizeSource).filter(Boolean) : [];
+  const encodedToken = encodeURIComponent(token);
+  const safeMetadata = item => item && (!token || Object.values(item).every(value =>
+    !value.includes(token) && !value.includes(encodedToken)));
+  const steps = Array.isArray(turn.steps) ? turn.steps.slice(0, 12).map(normalizeStep).filter(safeMetadata) : [];
+  const sources = Array.isArray(turn.sources) ? turn.sources.slice(0, 8).map(normalizeSource).filter(safeMetadata) : [];
   return {
     question, answer, mode,
     ...(scope ? { scope } : {}),
@@ -80,7 +83,7 @@ function readTurns(storage) {
     if (!raw || raw.length > MAX_STORED_LENGTH) return [];
     const saved = JSON.parse(raw);
     if (saved?.version !== 1 || !Array.isArray(saved.turns)) return [];
-    return saved.turns.slice(-MAX_TURNS).map(normalizeTurn).filter(Boolean);
+    return saved.turns.slice(-MAX_TURNS).map(turn => normalizeTurn(turn)).filter(Boolean);
   } catch {
     return [];
   }
@@ -143,8 +146,8 @@ export function createSessionStore(storage = browserStorage()) {
       }
       return messages;
     },
-    append(turn) {
-      const normalized = normalizeTurn(turn);
+    append(turn, token = '') {
+      const normalized = normalizeTurn(turn, token);
       if (!normalized) return false;
       turns = [...turns.slice(1 - MAX_TURNS), normalized];
       persist();

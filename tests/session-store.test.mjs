@@ -118,6 +118,22 @@ test('isolates malformed or unsupported saved state and snapshots cannot mutate 
   assert.equal(session.turns()[0].question, '有效问答');
 });
 
+test('filters an access token echoed inside evidence metadata', () => {
+  const storage = memoryStorage();
+  const session = createSessionStore(storage);
+  const token = 'secret/token"123';
+  const official = { title: '官方税则', url: 'https://example.org/official', kind: 'reference' };
+  session.append({
+    ...aiTurn('查询关税'),
+    steps: [{ name: 'lookup_tariff', status: 'ok' }, { name: token, status: 'ok' }],
+    sources: [official, { ...official, title: `引用 ${token}` },
+      { ...official, url: `https://example.org/?q=${encodeURIComponent(token)}` }],
+  }, token);
+  assert.deepEqual(session.turns()[0].sources, [official]);
+  assert.deepEqual(session.turns()[0].steps, [{ name: 'lookup_tariff', status: 'ok' }]);
+  assert.equal(storage.getItem(key).includes(encodeURIComponent(token)), false);
+});
+
 test('falls back to memory when storage is blocked and can replace a failed removal with empty state', () => {
   const blocked = () => { throw new Error('storage blocked'); };
   const disabled = createSessionStore({ getItem: blocked, setItem: blocked, removeItem: blocked });
