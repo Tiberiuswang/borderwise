@@ -28,7 +28,7 @@ let chatHistory = [];
 const MAX_HISTORY = 8;
 const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
-const dialogIds = ['caseDialog', 'planningDialog', 'sourcesDialog', 'settingsDialog'];
+const dialogIds = ['searchDialog', 'caseDialog', 'planningDialog', 'sourcesDialog', 'settingsDialog'];
 const planner = createTradePlanner(shipment);
 const mobileLayout = matchMedia('(max-width: 760px)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -54,7 +54,7 @@ function dismissMobileMenu() {
   $('#mobileMenu').focus();
 }
 
-function openDialog(id) {
+function openDialog(id, focusSelector = 'input:not([type=checkbox]), button') {
   const trigger = document.activeElement;
   previousFocus = mobileLayout.matches && $('#sidebar').contains(trigger) ? $('#mobileMenu') : trigger;
   closeDialogs(false);
@@ -63,7 +63,9 @@ function openDialog(id) {
   const dialog = $(`#${id}`);
   dialog.hidden = false;
   document.body.style.overflow = 'hidden';
-  requestAnimationFrame(() => dialog.querySelector('input:not([type=checkbox]), button')?.focus());
+  requestAnimationFrame(() => {
+    if (!dialog.hidden) dialog.querySelector(focusSelector)?.focus();
+  });
 }
 function closeDialogs(restoreFocus = true) {
   dialogIds.forEach(id => { $(`#${id}`).hidden = true; });
@@ -95,6 +97,25 @@ function showSettings() {
   form.elements.url.value = settings.url;
   form.elements.enabled.checked = settings.enabled;
   form.elements.token.value = settings.token;
+}
+
+const toolSearchInput = $('#toolSearchInput');
+const toolSearchResults = $$('[data-search-target]', $('#toolSearchForm'));
+if (/Mac|iPhone|iPad/i.test(navigator.platform)) $('#searchShortcut').textContent = '⌘ K';
+
+function filterTools() {
+  const words = toolSearchInput.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  for (const result of toolSearchResults) {
+    const searchable = (result.textContent + ' ' + result.dataset.searchTerms).toLowerCase();
+    result.hidden = !words.every(word => searchable.includes(word));
+  }
+  $('#toolSearchEmpty').hidden = toolSearchResults.some(result => !result.hidden);
+}
+
+function showToolSearch() {
+  toolSearchInput.value = '';
+  filterTools();
+  openDialog('searchDialog', '#toolSearchInput');
 }
 function levelLabel(level) { return level === 'high' ? '优先复核' : level === 'medium' ? '需确认' : '人工核验'; }
 
@@ -404,6 +425,19 @@ $('#toolPlanning').addEventListener('click', () => showPlanning());
 $('#toolSources').addEventListener('click', showSources);
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
+$('#sidebarSearch').addEventListener('click', showToolSearch);
+$('#topSearch').addEventListener('click', showToolSearch);
+toolSearchInput.addEventListener('input', filterTools);
+for (const result of toolSearchResults) {
+  result.addEventListener('click', () => {
+    closeDialogs();
+    document.getElementById(result.dataset.searchTarget).click();
+  });
+}
+$('#toolSearchForm').addEventListener('submit', event => {
+  event.preventDefault();
+  toolSearchResults.find(result => !result.hidden)?.click();
+});
 $('#mobileMenu').addEventListener('click', () => {
   setMobileMenu(true);
   $('#closeMobileMenu').focus();
@@ -419,6 +453,12 @@ mobileLayout.addEventListener('change', () => {
 $('#overlay').addEventListener('click', () => closeDialogs());
 $$('[data-close]').forEach(button => button.addEventListener('click', () => closeDialogs()));
 document.addEventListener('keydown', event => {
+  if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey) && !event.altKey &&
+      location.hash === '#workspace' && !$('.app-shell').inert && !event.isComposing) {
+    event.preventDefault();
+    showToolSearch();
+    return;
+  }
   if (event.key !== 'Escape') return;
   if ($('#sidebar').classList.contains('open')) dismissMobileMenu();
   else if ($('.app-shell').inert) closeDialogs();

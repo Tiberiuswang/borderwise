@@ -4,7 +4,7 @@ body:has(#workspace:target) .entrance {
 }
 
 .entrance {
-  --cream: #fff8eb;
+  --entrance-ink: #f4f4f7;
   position: relative;
   isolation: isolate;
   display: grid;
@@ -14,8 +14,8 @@ body:has(#workspace:target) .entrance {
   min-height: 100svh;
   overflow: hidden;
   padding: clamp(22px, 3.8vw, 56px) clamp(24px, 6.3vw, 110px);
-  color: var(--cream);
-  background: #19251b;
+  color: var(--entrance-ink);
+  background: #111214;
 }
 
 .entrance-image {
@@ -31,6 +31,7 @@ body:has(#workspace:target) .entrance {
   height: 100%;
   object-fit: cover;
   object-position: 50% 61%;
+  filter: grayscale(1) brightness(.78);
   transform: translate(var(--art-x, 0px), var(--art-y, 0px)) scale(1.028);
   transition: transform 280ms ease-out;
 }
@@ -40,9 +41,9 @@ body:has(#workspace:target) .entrance {
   z-index: -1;
   inset: 0;
   background:
-    linear-gradient(270deg, #101b11e6, #172819ad 23%, #1725193b 43%, transparent 67%),
-    linear-gradient(180deg, #0f1a11a1, transparent 24%),
-    linear-gradient(0deg, #12201580, transparent 24%);
+    linear-gradient(270deg, #101114ed, #101114c9 25%, #1011143b 48%, transparent 70%),
+    linear-gradient(180deg, #0e1014ac, transparent 28%),
+    linear-gradient(0deg, #0d0f1480, transparent 24%);
   content: "";
 }
 
@@ -58,7 +59,7 @@ body:has(#workspace:target) .entrance {
   letter-spacing: -.045em;
 }
 
-.entrance-brand > span > span { color: var(--accent); }
+.entrance-brand > span > span { color: var(--brand-flare); }
 .entrance-emblem {
   display: grid;
   flex: none;
@@ -66,9 +67,9 @@ body:has(#workspace:target) .entrance {
   width: 48px;
   height: 48px;
   padding: 0;
-  border: 1px solid #e4bd726b;
-  border-radius: 3px;
-  background: #14251675;
+  border: 1px solid #b3bac04d;
+  border-radius: 8px;
+  background: #10121599;
   cursor: grab;
   touch-action: none;
 }
@@ -84,14 +85,14 @@ body:has(#workspace:target) .entrance {
 }
 
 .entrance-copy h1 {
-  font: 650 clamp(47px, 5.4vw, 82px)/1.12 var(--serif);
-  letter-spacing: .06em;
+  font: 580 clamp(47px, 5.4vw, 82px)/1.1 var(--sans);
+  letter-spacing: -.025em;
 }
 
 .entrance-copy h1:focus { outline: none; }
 .entrance-copy p {
   margin-top: clamp(14px, 2vw, 25px);
-  color: #f4f4e5;
+  color: #e1e3e8;
   font-size: clamp(13px, 1.1vw, 15px);
   letter-spacing: .09em;
 }
@@ -104,10 +105,11 @@ body:has(#workspace:target) .entrance {
   min-height: 52px;
   margin-top: clamp(25px, 4vw, 45px);
   padding: 10px 16px 10px 18px;
-  border: 1px solid #e7ead2a3;
-  border-radius: 3px;
-  color: var(--cream);
-  background: #304a37;
+  border: 1px solid #555862;
+  border-radius: 7px;
+  color: var(--entrance-ink);
+  background: linear-gradient(180deg, #303239, #1f2126);
+  box-shadow: inset 0 1px #ffffff12;
   font-size: 14px;
   font-weight: 650;
   letter-spacing: .08em;
@@ -115,8 +117,8 @@ body:has(#workspace:target) .entrance {
 }
 
 .entrance-button span { font-size: 18px; line-height: 1; }
-.entrance-button:hover { color: #223326; background: var(--cream); }
-.entrance :focus-visible { outline-color: var(--cream); }
+.entrance-button:hover { color: #111216; background: var(--entrance-ink); }
+.entrance :focus-visible { outline-color: var(--accent); }
 
 @media (max-width: 700px) {
   .entrance {
@@ -126,7 +128,7 @@ body:has(#workspace:target) .entrance {
 
   .entrance-image img { object-position: 50% 50%; transform: none; }
   .entrance::after {
-    background: linear-gradient(180deg, #101d139c, transparent 24%, transparent 48%, #132016eb);
+    background: linear-gradient(180deg, #1011159e, transparent 24%, #10111540 48%, #111214ef);
   }
 
   .entrance-emblem { width: 42px; height: 42px; }

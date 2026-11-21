@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#19251b">
+  <meta name="theme-color" content="#111214">
   <meta name="description" content="Borderwise 跨境合规工作台：整理报关资料，生成谨慎的人工复核清单。">
   <title>Borderwise · 跨境合规工作台</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./entrance.css">
-  <link rel="icon" href="./favicon.png?v=gold" type="image/png">
+  <link rel="icon" href="./favicon-dark.png" type="image/png">
 </head>
 <body>
 <main class="entrance" id="entrance" aria-labelledby="entranceTitle">
@@ -16,8 +16,8 @@
     <img src="./assets/saihoji-entrance.webp" alt="" width="994" height="1280" fetchpriority="high">
   </div>
   <div class="entrance-brand">
-    <button class="entrance-emblem" type="button" aria-label="回弹菊花标记">
-      <img src="./assets/chrysanthemum.png?v=gold" alt="" width="40" height="40" draggable="false">
+    <button class="entrance-emblem" type="button" aria-label="回弹品牌标记">
+      <img src="./assets/borderwise-mark.png" alt="" width="40" height="40" draggable="false">
     </button>
     <span>borderwise<span>.</span></span>
   </div>
@@ -32,10 +32,13 @@
   <aside class="sidebar" id="sidebar">
     <button class="mobile-close" id="closeMobileMenu" type="button" aria-label="关闭菜单">×</button>
     <a class="brand" href="#entrance" aria-label="返回 Borderwise 首页">
-      <span class="brand-mark"><img src="./assets/chrysanthemum.png?v=gold" alt="" width="30" height="30"></span>
+      <span class="brand-mark"><img src="./assets/borderwise-mark.png" alt="" width="30" height="30"></span>
       <span><strong>borderwise<span class="brand-dot">.</span></strong><small>跨境合规工作台</small></span>
     </a>
-    <button class="new-task" id="newTask"><span class="icon" data-icon="plus"></span> 开启新分析 <span class="new-arrow">↗</span></button>
+    <button class="search-trigger" type="button" id="sidebarSearch" aria-keyshortcuts="Control+K Meta+K">
+      <span class="icon" data-icon="search"></span><span>查找工具</span><kbd aria-hidden="true" id="searchShortcut">Ctrl K</kbd>
+    </button>
+    <button class="new-task" id="newTask"><span class="icon" data-icon="plus"></span> 开启新分析 <span class="new-arrow" aria-hidden="true">↗</span></button>
     <nav class="navigation" aria-label="主菜单">
       <button class="nav-item active" id="navChat" aria-current="page"><span class="icon" data-icon="message"></span>合规助手<span class="nav-indicator"></span></button>
       <button class="nav-item" id="navForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
@@ -55,7 +58,11 @@
     <header class="topbar">
       <button class="mobile-menu" id="mobileMenu" aria-label="主菜单" aria-expanded="false" aria-controls="sidebar"><span class="icon" data-icon="menu"></span></button>
       <div class="breadcrumb"><span>工作空间</span><span class="slash" aria-hidden="true">/</span><strong>合规助手</strong></div>
-      <div class="topbar-actions"><span class="mode-indicator"><span></span><b id="modeLabel">本地检查模式</b></span><button class="top-icon" id="topSources" aria-label="查看官方资料"><span class="icon" data-icon="help"></span></button></div>
+      <div class="topbar-actions">
+        <span class="mode-indicator"><span></span><b id="modeLabel">本地检查模式</b></span>
+        <button class="top-icon mobile-search" type="button" id="topSearch" aria-label="查找工具"><span class="icon" data-icon="search"></span></button>
+        <button class="top-icon" id="topSources" aria-label="查看官方资料"><span class="icon" data-icon="help"></span></button>
+      </div>
     </header>
 
     <div class="content-wrap">
@@ -150,6 +157,22 @@
 <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true" hidden></div>
 
 <div class="overlay" id="overlay" hidden></div>
+<section class="dialog compact-dialog search-dialog" id="searchDialog" role="dialog" aria-modal="true" aria-labelledby="searchTitle" hidden>
+  <div class="dialog-header"><div><h2 id="searchTitle">查找工具</h2></div><button class="close-button" data-close aria-label="关闭">×</button></div>
+  <form id="toolSearchForm" role="search">
+    <label class="sr-only" for="toolSearchInput">输入工具名称</label>
+    <div class="search-box"><span class="icon" data-icon="search"></span><input id="toolSearchInput" type="search" placeholder="搜索关税、货物资料、设置…" autocomplete="off"></div>
+    <div class="search-results">
+      <button type="button" data-search-target="navChat" data-search-terms="提问 问答 对话 chat"><span class="icon" data-icon="message"></span>合规助手<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="navForm" data-search-terms="填入 货物 资料 HS 清单 report"><span class="icon" data-icon="file"></span>报关资料检查<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="navPlanning" data-search-terms="税率 海运 物流 报价 HS tariff shipping"><span class="icon" data-icon="route"></span>关税与运输比价<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="navSources" data-search-terms="政策 海关 法规 来源 OFAC"><span class="icon" data-icon="globe"></span>官方资料库<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="openSettings" data-search-terms="worker ai 配置 清除 模式"><span class="icon" data-icon="settings"></span>设置与数据<span aria-hidden="true">↗</span></button>
+    </div>
+    <p class="search-empty" id="toolSearchEmpty" role="status" hidden>没有找到相关工具。</p>
+  </form>
+</section>
+
 <section class="dialog" id="caseDialog" role="dialog" aria-modal="true" aria-labelledby="caseDialogTitle" hidden>
   <div class="dialog-header"><div><h2 id="caseDialogTitle">填写货物资料</h2><p>越完整的资料，越有助于识别需要人工复核的缺项。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
   <form id="caseForm"><div class="form-grid">
