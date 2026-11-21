@@ -60,7 +60,6 @@ body:has(#workspace:target) .entrance {
   letter-spacing: -.045em;
 }
 
-.entrance-brand > span > span { color: var(--brand-flare); }
 .entrance-emblem {
   display: grid;
   flex: none;

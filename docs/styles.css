@@ -12,7 +12,6 @@
   --key-fill: #e3e6ed;
   --hero-tint: #1b1d21;
   --accent: #aebfe0;
-  --brand-flare: #f18984;
   --radius: 9px;
   --sidebar-width: 224px;
   --sans: system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
@@ -106,7 +105,6 @@ a { color: inherit; text-decoration: none; }
 
 .brand-mark img { display: block; width: 30px; height: 30px; object-fit: contain; }
 .brand strong { display: block; color: #f4f5f6; font-size: 21px; letter-spacing: -.045em; line-height: 1.15; }
-.brand-dot { color: var(--brand-flare); }
 
 .new-task, .nav-item, .history-item, .settings-link {
   display: flex;
