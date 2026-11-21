@@ -365,6 +365,10 @@ a { color: inherit; text-decoration: none; }
 .rich ul, .rich ol { margin: 7px 0; padding-left: 1.6em; }
 .rich li + li { margin-top: 4px; }
 .ai-note { margin-top: 13px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.agent-record { margin-top: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.agent-record summary { cursor: pointer; color: var(--ink); }
+.agent-record ul { margin: 5px 0; padding-left: 19px; }
+.agent-record a { color: var(--action); text-decoration: underline; text-underline-offset: 2px; }
 .ai-fallback-note { margin-bottom: 12px; padding: 8px 10px; border-radius: 7px; color: #e0c992; background: #332a1d; font-size: 12px; }
 .follow-ups { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; }
 .follow-ups span { color: var(--muted); font-size: 12px; }

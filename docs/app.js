@@ -1,6 +1,7 @@
 import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, getLocalFollowUps, localAnswer } from './engine.js';
 import { AI_CONFIG } from './ai-config.js';
 import { createTradePlanner } from './planning.js';
+import { createSessionStore } from './session-store.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -24,8 +25,7 @@ const savedSettings = getStored(STORAGE.settings) || {};
 const defaultUrl = typeof AI_CONFIG.url === 'string' ? AI_CONFIG.url.trim().replace(/\/$/, '') : '';
 let settings = { url: savedSettings.url || defaultUrl, enabled: typeof savedSettings.enabled === 'boolean' ? savedSettings.enabled : Boolean(AI_CONFIG.enabled && defaultUrl), token: '' };
 let activeReply = null;
-let chatHistory = [];
-const MAX_HISTORY = 8;
+const sessionStore = createSessionStore();
 const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
 const dialogIds = ['searchDialog', 'caseDialog', 'planningDialog', 'sourcesDialog', 'settingsDialog'];
@@ -322,7 +322,10 @@ function addPlanningLinks(node, question) {
 
 function showLocalAnswer(message, question, currentShipment, fallback = '') {
   message.mode.textContent = '本地助手';
-  message.text.textContent = localAnswer(question, currentShipment);
+  const answer = localAnswer(question, currentShipment);
+  message.text.textContent = answer;
+  const { token } = settings;
+  sessionStore.append({ question: redactToken(question, token), answer: redactToken(answer, token), mode: 'local' });
   if (fallback) {
     const note = document.createElement('p');
     note.className = 'ai-fallback-note';
@@ -331,6 +334,72 @@ function showLocalAnswer(message, question, currentShipment, fallback = '') {
   }
   addPlanningLinks(message.node, question);
   addFollowUps(message.node, getLocalFollowUps(question, currentShipment));
+}
+
+const toolNames = new Map([
+  ['review_shipment', '复核货物资料'],
+  ['lookup_tariff', '查询官方税则'],
+  ['official_sources', '查找官方入口'],
+]);
+const stepLabels = new Map([
+  ['ok', '完成'], ['needs_input', '需补资料'], ['unavailable', '暂不可用'],
+  ['denied', '未执行'], ['error', '执行失败'],
+]);
+
+function addAgentRecord(node, { steps = [], sources = [] }) {
+  if (!steps.length && !sources.length) return;
+  const record = document.createElement('details');
+  record.className = 'agent-record';
+  const title = document.createElement('summary');
+  title.textContent = '工具记录与来源';
+  record.append(title);
+  if (steps.length) {
+    const list = document.createElement('ul');
+    for (const step of steps) {
+      const row = document.createElement('li');
+      row.textContent = `${toolNames.get(step.name) || '其他工具'} · ${stepLabels.get(step.status) || '状态未知'}`;
+      list.append(row);
+    }
+    record.append(list);
+  }
+  if (sources.length) {
+    const list = document.createElement('ul');
+    for (const source of sources) {
+      const row = document.createElement('li');
+      const link = document.createElement('a');
+      link.href = source.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = source.title;
+      row.append(link);
+      const type = source.kind === 'lookup' ? '已查询' : '供复核';
+      row.append(` · ${type}`);
+      if (source.retrievedAt) {
+        const time = document.createElement('time');
+        time.dateTime = source.retrievedAt;
+        time.textContent = new Date(source.retrievedAt).toLocaleString('zh-CN');
+        row.append(' · ', time);
+      }
+      list.append(row);
+    }
+    record.append(list);
+  }
+  node.querySelector('.message-body').append(record);
+}
+
+function showModelAnswer(message, turn) {
+  message.mode.textContent = 'AI 助手';
+  renderMarkdown(message.text, turn.answer);
+  const note = document.createElement('p');
+  note.className = 'ai-note';
+  note.textContent = '模型输出可能出错，请按适用日期和完整税则逐项人工复核。';
+  message.text.append(note);
+  addAgentRecord(message.node, turn);
+  addPlanningLinks(message.node, turn.question);
+}
+
+function redactToken(text, token) {
+  return token ? text.replaceAll(token, '[已隐藏]') : text;
 }
 
 async function sendQuestion(question) {
@@ -354,28 +423,28 @@ async function sendQuestion(question) {
   const message = addMessage('assistant', '正在整理待核验事项…');
   message.mode.textContent = 'AI 助手';
   message.node.classList.add('pending');
+  const { url, token } = settings;
+  const savedQuestion = redactToken(content, token);
   try {
     const reportContext = report && { checks: report.checks, generatedAt: report.generatedAt, input: report.input };
-    const response = await fetch(settings.url, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.token}` },
-      body: JSON.stringify({ question: content, shipment: currentShipment, report: reportContext, history: chatHistory }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        protocol: 2, question: savedQuestion, shipment: currentShipment, report: reportContext, history: sessionStore.history(url),
+      }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
     });
     const payload = await response.json();
     if (controller.signal.aborted) return;
     if (!response.ok || typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
-    const { body, followUps } = splitFollowUps(payload.answer.trim());
+    const answer = redactToken(payload.answer, token);
+    const { body, followUps } = splitFollowUps(answer.trim());
     if (!body) throw new Error('AI 服务未返回有效内容。');
-    renderMarkdown(message.text, body);
-    const note = document.createElement('p');
-    note.className = 'ai-note';
-    note.textContent = '模型输出可能出错，未核验实时法规；请查看官方来源并由专业人员复核。';
-    message.text.append(note);
-    addPlanningLinks(message.node, content);
+    const turn = { question: savedQuestion, answer: body, mode: 'ai', scope: url, steps: payload.steps, sources: payload.sources };
+    if (!sessionStore.append(turn)) throw new Error('AI 服务未返回有效内容。');
+    showModelAnswer(message, sessionStore.turns().at(-1));
     addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
-    chatHistory.push({ role: 'user', content }, { role: 'assistant', content: body });
-    chatHistory = chatHistory.slice(-MAX_HISTORY);
   } catch {
     if (!controller.signal.aborted) {
       showLocalAnswer(message, content, currentShipment, 'AI 服务未能回答，本次已切换为本地回答。可在设置中检查连接。');
@@ -412,7 +481,8 @@ function downloadReport(current) {
 $('#newTask').addEventListener('click', () => {
   if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
   activeReply?.abort();
-  chatHistory = []; shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
+  sessionStore.clear();
+  shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
   planner.setShipment(shipment);
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
@@ -475,7 +545,7 @@ $('#caseForm').addEventListener('submit', event => {
       JSON.stringify(check) === JSON.stringify(previousChecks.get(check.id))).map(check => check.id);
   } else {
     activeReply?.abort();
-    chatHistory = [];
+    sessionStore.clear();
   }
   shipment = next.input;
   if (!sameShipment) planner.setShipment(shipment);
@@ -512,18 +582,27 @@ $('#settingsForm').addEventListener('submit', event => {
   if ((token || (enabled && !AI_CONFIG.publicAccess)) && !/^[\x21-\x7e]{1,300}$/.test(token)) { toast('访问口令须为 1–300 位无空格的可打印 ASCII 字符'); return; }
   if (enabled && !AI_CONFIG.publicAccess && !token) { toast('请填写 Worker 访问口令，或在 ai-config.js 中确认公开访客模式'); return; }
   activeReply?.abort();
-  chatHistory = [];
   settings = { enabled, url, token }; setStored(STORAGE.settings, { url, enabled }); updateMode(); closeDialogs(); toast(enabled ? 'AI 模式已启用，请注意数据会发送至服务商' : '已切换到本地模式');
 });
 $('#clearData').addEventListener('click', () => {
-  if (!window.confirm('确定清除此浏览器中保存的货物资料、复核清单及设置？此操作不可撤销。')) return;
+  if (!window.confirm('确定清除货物资料、复核清单、设置和当前标签页的对话？此操作不可撤销。')) return;
   activeReply?.abort();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
-  chatHistory = []; shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  sessionStore.clear();
+  shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
   planner.setShipment(shipment);
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
+for (const turn of sessionStore.turns()) {
+  addMessage('user', turn.question);
+  const message = addMessage('assistant', turn.answer);
+  if (turn.mode === 'ai') showModelAnswer(message, turn);
+  else {
+    addPlanningLinks(message.node, turn.question);
+    addFollowUps(message.node, getLocalFollowUps(turn.question, shipment));
+  }
+}
 
 window.addEventListener('hashchange', () => {
   const inWorkspace = location.hash === '#workspace';
