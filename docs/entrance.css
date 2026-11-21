@@ -21,18 +21,20 @@ body:has(#workspace:target) .entrance {
 .entrance-image {
   position: absolute;
   z-index: -2;
-  inset: -5% 0 0;
+  inset: 0;
   overflow: hidden;
+  background: radial-gradient(ellipse at 33% 45%, #30353e 0%, #1a1d23 42%, #0e0f12 78%);
 }
 
 .entrance-image img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 61%;
-  filter: grayscale(1) brightness(.78);
-  transform: translate(var(--art-x, 0px), var(--art-y, 0px)) scale(1.028);
+  position: absolute;
+  top: 50%;
+  left: 34%;
+  width: min(47vw, 70svh, 600px);
+  height: auto;
+  opacity: .82;
+  filter: grayscale(.7);
+  transform: translate(calc(-50% + var(--art-x, 0px)), calc(-50% + var(--art-y, 0px)));
   transition: transform 280ms ease-out;
 }
 
@@ -41,9 +43,8 @@ body:has(#workspace:target) .entrance {
   z-index: -1;
   inset: 0;
   background:
-    linear-gradient(270deg, #101114ed, #101114c9 25%, #1011143b 48%, transparent 70%),
-    linear-gradient(180deg, #0e1014ac, transparent 28%),
-    linear-gradient(0deg, #0d0f1480, transparent 24%);
+    linear-gradient(270deg, #101114ed, #101114c9 22%, #10111425 43%, transparent 65%),
+    linear-gradient(180deg, #0e10146a, transparent 26%);
   content: "";
 }
 
@@ -126,9 +127,15 @@ body:has(#workspace:target) .entrance {
     padding: 21px 23px clamp(34px, 7vh, 65px);
   }
 
-  .entrance-image img { object-position: 50% 50%; transform: none; }
+  .entrance-image { background: radial-gradient(ellipse at 50% 35%, #30353e, #111214 76%); }
+  .entrance-image img {
+    top: 36%;
+    left: 50%;
+    width: min(78vw, 48svh, 410px);
+    transform: translate(-50%, -50%);
+  }
   .entrance::after {
-    background: linear-gradient(180deg, #1011159e, transparent 24%, #10111540 48%, #111214ef);
+    background: linear-gradient(180deg, #10111570, transparent 21%, transparent 47%, #111214e8 87%);
   }
 
   .entrance-emblem { width: 42px; height: 42px; }
@@ -143,6 +150,7 @@ body:has(#workspace:target) .entrance {
 
 @media (max-width: 700px) and (max-height: 430px) {
   .entrance { padding-block: 16px 22px; }
+  .entrance-image img { top: 45%; left: 73%; width: min(43vw, 52svh); opacity: .6; }
   .entrance-copy { margin-top: 48px; }
   .entrance-copy h1 { font-size: 38px; }
 }
