@@ -10,8 +10,8 @@ const icons = {
   shield:'<path d="M12 22s7-3.2 7-10V5l-7-3-7 3v7c0 6.8 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/>', settings:'<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>', help:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2-2.5 3.8M12 17h.01"/>', package:'<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9M8 5.3l8 4.4"/>',
   search:'<circle cx="10.7" cy="10.7" r="6.5"/><path d="m16 16 4 4"/>', route:'<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 1 0 0-6H9a3 3 0 1 1 0-6h7"/>', sliders:'<path d="M4 7h10m4 0h2M4 17h2m4 0h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
-  'arrow-up':'<path d="M12 19V5m-5 5 5-5 5 5"/>', sparkle:'<path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3ZM19 16l.7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z"/>',
-  layers:'<path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5"/>', 'check-circle':'<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>', download:'<path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/>', info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>'
+  'arrow-up':'<path d="M12 19V5m-5 5 5-5 5 5"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5"/>', download:'<path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/>', info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>'
 };
 $$('[data-icon]').forEach(element => { element.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[element.dataset.icon] || ''}</svg>`; });
 
@@ -134,23 +134,23 @@ function reviewSummary(current) {
 
 function updatePanel() {
   const hasReport = !!report && Array.isArray(report.checks);
+  const product = hasReport ? (shipment.product || '未命名货物') : '';
+  const route = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') : '';
   $('#caseStatus').classList.toggle('ready', hasReport);
   $('#caseStatus').innerHTML = hasReport ? '<span></span> 已生成清单' : '<span></span> 待开始';
-  $('#caseProduct').textContent = hasReport ? (shipment.product || '未命名货物') : '新的分析';
-  $('#caseDescription').textContent = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') || '已生成资料复核清单' : '尚未填写货物资料';
+  $('#caseProduct').textContent = product;
+  $('#caseProduct').hidden = !product;
+  $('#caseDescription').textContent = route;
+  $('#caseDescription').hidden = !route;
   $('#caseStatus').setAttribute('aria-label', hasReport ? '已生成清单，不代表合规' : '待开始');
-  $('#checkCount').textContent = hasReport ? String(report.checks.length) : '—';
+  $('#checkCount').textContent = hasReport ? String(report.checks.length) : '';
+  $('#reviewDetails').hidden = !hasReport;
   $('#exportReport').disabled = !hasReport;
-  $('#viewReview').hidden = !hasReport;
-  $('#reviewProgressGroup').hidden = !hasReport;
-  $('#historyTitle').textContent = hasReport ? (shipment.product || '未命名货物') : '暂无已保存的分析';
+  $('#recentCase').hidden = !hasReport;
+  $('#historyTitle').textContent = product;
   const list = $('#checklist');
   list.replaceChildren();
-  if (!hasReport) {
-    const empty = document.createElement('div'); empty.className = 'empty-check';
-    empty.innerHTML = '<span class="empty-check-icon"><span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true">'+icons['check-circle']+'</svg></span></span><strong>清单将在这里生成</strong>';
-    list.append(empty); return;
-  }
+  if (!hasReport) return;
   const reviewed = reviewedChecks(report);
   const pending = orderedChecks(report).filter(check => !reviewed.has(check.id));
   const progress = $('#reviewProgress');
@@ -252,7 +252,6 @@ function canUseAI() {
 function updateMode() {
   const ai = canUseAI();
   $('#modeLabel').textContent = ai ? 'AI 已启用' : (settings.enabled ? 'AI 待连接' : '本地检查模式');
-  $('#composerMode').innerHTML = ai ? '<span></span> AI 对话模式' : '<span></span> 本地辅助模式';
 }
 function inlineMarkdown(parent, text) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {

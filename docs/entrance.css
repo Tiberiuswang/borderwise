@@ -30,7 +30,7 @@ body:has(#workspace:target) .entrance {
   position: absolute;
   top: 50%;
   left: 34%;
-  width: min(47vw, 70svh, 600px);
+  width: min(48vw, 71svh, 640px);
   height: auto;
   opacity: .82;
   filter: grayscale(.7);
@@ -91,13 +91,6 @@ body:has(#workspace:target) .entrance {
 }
 
 .entrance-copy h1:focus { outline: none; }
-.entrance-copy p {
-  margin-top: clamp(14px, 2vw, 25px);
-  color: #e1e3e8;
-  font-size: clamp(13px, 1.1vw, 15px);
-  letter-spacing: .09em;
-}
-
 .entrance-button {
   display: inline-flex;
   align-items: center;
