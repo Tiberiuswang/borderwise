@@ -2,6 +2,9 @@ import { EXAMPLE_SHIPMENT, SOURCES, analyzeShipment, getLocalFollowUps, localAns
 import { AI_CONFIG } from './ai-config.js';
 import { createTradePlanner } from './planning.js';
 import { createSessionStore } from './session-store.js';
+import { createWorkflowWorkspace } from './shipment-workflow-ui.js';
+import { buildRfqDraft, buildShipmentWorkflow, inferWorkflowScenario } from './shipment-workflow.js';
+import { localCalendarDate } from './logistics.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -28,10 +31,14 @@ let activeReply = null;
 const sessionStore = createSessionStore();
 const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
-const dialogIds = ['searchDialog', 'caseDialog', 'planningDialog', 'sourcesDialog', 'settingsDialog'];
+const dialogIds = ['searchDialog', 'caseDialog', 'planningDialog', 'workflowDialog', 'sourcesDialog', 'settingsDialog'];
 const planner = createTradePlanner(shipment);
+const workflow = createWorkflowWorkspace($('#workflowDialog'), shipment);
 const mobileLayout = matchMedia('(max-width: 760px)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const quoteQuestion = /比价|(?:比较|对比|分析|复核|看.*录入|哪种|哪个|哪家).{0,16}(?:报价|运费|运价|费用|成本|时效|运输方案)|(?:报价|运费|运价|费用|成本|运输方案|时效).{0,16}(?:对比|比较|最低|更低|更快|便宜|差多少)|\b(?:compare|review|analy[sz]e)\b.{0,35}\b(?:quotes?|freight|shipping costs?|transit times?)\b/i;
+const inquiryQuestion = /询价|询盘|\b(?:rfq|request for (?:a )?quote|freight inquiry)\b/i;
+const workflowQuestion = /物流执行|物流节点|物流流程|运输流程|交接节点|交付节点|履约|订舱|单证清单|截港|截关|物流异常|运输异常|签收|\b(?:incoterms?|shipping workflow|shipping milestones?)\b/i;
 
 function toast(text) {
   const el = $('#toast');
@@ -89,6 +96,10 @@ function showForm() { setFormValues(shipment); openDialog('caseDialog'); }
 function showPlanning(tab = 'tariffs') {
   planner.activate(tab);
   openDialog('planningDialog');
+}
+function showWorkflow() {
+  workflow.activate();
+  openDialog('workflowDialog', 'select[name="mode"]');
 }
 function showSources() { openDialog('sourcesDialog'); }
 function showSettings() {
@@ -307,6 +318,7 @@ function addPlanningLinks(node, question) {
   if (/运费|运价|多式联运|运输方案|运输成本|航运费用|供应链风险|freight|multimodal/i.test(question)) {
     links.push(['logistics', '比较运输报价']);
   }
+  if (isWorkflowQuestion(question)) links.push(['workflow', '查看物流执行']);
   if (!links.length) return;
   const wrap = document.createElement('div');
   wrap.className = 'follow-ups planning-message-actions';
@@ -314,15 +326,47 @@ function addPlanningLinks(node, question) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = text;
-    button.addEventListener('click', () => showPlanning(tab));
+    button.addEventListener('click', () => { if (tab === 'workflow') showWorkflow(); else showPlanning(tab); });
     wrap.append(button);
   }
   node.querySelector('.message-body').append(wrap);
 }
 
+function isWorkflowQuestion(question) {
+  return inquiryQuestion.test(question) || workflowQuestion.test(question) || Boolean(inferWorkflowScenario(question));
+}
+
+function logisticsContextFor(question) {
+  const details = isWorkflowQuestion(question) ? workflow.snapshot() : null;
+  const comparison = quoteQuestion.test(question) && !inquiryQuestion.test(question) ? planner.snapshot() : null;
+  if (!details && !comparison) return undefined;
+  return { date: localCalendarDate(), ...(details && { workflow: details }), ...(comparison && { comparison }) };
+}
+
+function localWorkflowAnswer(question, shipment) {
+  if (!isWorkflowQuestion(question)) return '';
+  const details = workflow.snapshot() || {};
+  const input = inferWorkflowScenario(question, shipment, details) || { shipment, details };
+  if (inquiryQuestion.test(question)) return buildRfqDraft(input);
+  const { term, responsibilities, milestones, documents, alerts, incident } =
+    buildShipmentWorkflow({ ...input, today: localCalendarDate() });
+  const notes = alerts.slice(0, 3).map(item => `${item.title} · ${item.action}`);
+  if (incident) return [incident.title, ...incident.steps.map(step => `• ${step}`), ...notes].join('\n');
+  return [
+    [term.code, term.title].filter(Boolean).join(' · '),
+    term.note,
+    ...responsibilities.map(item => `${item.title} · ${item.detail}`),
+    `流程 · ${milestones.map(item => item.title).join(' → ')}`,
+    `单证 · ${documents.map(item => item.title).join('、')}`,
+    ...notes,
+  ].filter(Boolean).join('\n');
+}
+
 function showLocalAnswer(message, question, currentShipment, fallback = '') {
   message.mode.textContent = '本地助手';
-  const answer = localAnswer(question, currentShipment);
+  const answer = localAnswer(question, currentShipment, {
+    workflowAnswer: () => localWorkflowAnswer(question, currentShipment),
+  });
   message.text.textContent = answer;
   const { token } = settings;
   sessionStore.append({ question: redactToken(question, token), answer: redactToken(answer, token), mode: 'local' });
@@ -340,6 +384,9 @@ const toolNames = new Map([
   ['review_shipment', '复核货物资料'],
   ['lookup_tariff', '查询官方税则'],
   ['official_sources', '查找官方入口'],
+  ['plan_shipment_workflow', '复核运输节点与单证'],
+  ['compare_transport_quotes', '比较实际运输报价'],
+  ['draft_freight_inquiry', '生成英文询价草稿'],
 ]);
 const stepLabels = new Map([
   ['ok', '完成'], ['needs_input', '需补资料'], ['unavailable', '暂不可用'],
@@ -427,11 +474,13 @@ async function sendQuestion(question) {
   const savedQuestion = redactToken(content, token);
   try {
     const reportContext = report && { checks: report.checks, generatedAt: report.generatedAt, input: report.input };
+    const logistics = logisticsContextFor(content);
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
-        protocol: 2, question: savedQuestion, shipment: currentShipment, report: reportContext, history: sessionStore.history(url),
+        protocol: 2, question: savedQuestion, shipment: currentShipment, report: reportContext,
+        history: sessionStore.history(url), logistics,
       }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
     });
@@ -479,11 +528,14 @@ function downloadReport(current) {
 }
 
 $('#newTask').addEventListener('click', () => {
-  if (report && !window.confirm('开始新分析会清除当前浏览器保存的上一份清单。请先导出需要保留的内容。继续吗？')) return;
+  if ((report || workflow.snapshot() || planner.snapshot()) &&
+      !window.confirm('开始新分析会清除当前的清单、物流记录和报价。继续吗？')) return;
   activeReply?.abort();
   sessionStore.clear();
   shipment = {}; report = null; setStored(STORAGE.shipment, shipment); setStored(STORAGE.report, report); clearMessages(); updatePanel(); setMobileMenu(false); $('#chatInput').focus(); toast('已开启新分析');
   planner.setShipment(shipment);
+  workflow.clear();
+  workflow.setShipment(shipment);
 });
 $('#navChat').addEventListener('click', () => { closeDialogs(); $('#chatInput').focus(); });
 $('#navForm').addEventListener('click', showForm); $('#attachCase').addEventListener('click', showForm); $('#panelForm').addEventListener('click', showForm); $('#historyButton').addEventListener('click', showForm);
@@ -491,6 +543,23 @@ $('#navPlanning').addEventListener('click', () => showPlanning());
 $('#panelPlanning').addEventListener('click', () => showPlanning());
 $('#toolForm').addEventListener('click', showForm);
 $('#toolPlanning').addEventListener('click', () => showPlanning());
+$('#navWorkflow').addEventListener('click', showWorkflow);
+$('#toolWorkflow').addEventListener('click', showWorkflow);
+$('#askAgentAboutQuotes').addEventListener('click', () => {
+  const status = $('#logisticsStatus');
+  if (!planner.snapshot()) {
+    status.textContent = '请填写共同起讫点、货量和至少两个实际运输方案。';
+    return;
+  }
+  if (!canUseAI()) {
+    status.textContent = '连接 AI 后可以在对话中分析，也可直接在此比较成本与时效。';
+    return;
+  }
+  if (activeReply) return;
+  closeDialogs(false);
+  $('#chatInput').focus();
+  sendQuestion('请比较我录入的运输报价，说明成本、时效、适用范围和待确认的费用。');
+});
 $('#toolSources').addEventListener('click', showSources);
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
@@ -548,7 +617,10 @@ $('#caseForm').addEventListener('submit', event => {
     sessionStore.clear();
   }
   shipment = next.input;
-  if (!sameShipment) planner.setShipment(shipment);
+  if (!sameShipment) {
+    planner.setShipment(shipment);
+    workflow.setShipment(shipment);
+  }
   report = next;
   setStored(STORAGE.shipment, shipment);
   setStored(STORAGE.report, report);
@@ -585,12 +657,14 @@ $('#settingsForm').addEventListener('submit', event => {
   settings = { enabled, url, token }; setStored(STORAGE.settings, { url, enabled }); updateMode(); closeDialogs(); toast(enabled ? 'AI 模式已启用，请注意数据会发送至服务商' : '已切换到本地模式');
 });
 $('#clearData').addEventListener('click', () => {
-  if (!window.confirm('确定清除货物资料、复核清单、设置和当前标签页的对话？此操作不可撤销。')) return;
+  if (!window.confirm('确定清除货物资料、清单、物流资料、设置和当前标签页的对话？此操作不可撤销。')) return;
   activeReply?.abort();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
   sessionStore.clear();
   shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
   planner.setShipment(shipment);
+  workflow.clear();
+  workflow.setShipment(shipment);
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);

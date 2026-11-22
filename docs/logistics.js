@@ -14,6 +14,18 @@ export const LOGISTICS_SCOPES = Object.freeze({
   unknown: '待确认',
 });
 
+export const LOGISTICS_FEE_CATEGORIES = Object.freeze({
+  terminalHandling: '码头操作费（THC）',
+  fuel: '燃油附加费',
+  insurance: '运输保险',
+  drayage: '提送货 / 短驳',
+  clearance: '报关服务费',
+  storage: '仓储费',
+  demurrage: '滞港费',
+  detention: '滞箱费',
+  other: '其他附加费',
+});
+
 export const FX_SOURCE = Object.freeze({
   name: '欧洲中央银行（ECB）参考汇率，经 Frankfurter 提供',
   url: 'https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html',
@@ -61,6 +73,81 @@ function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
   const time = Date.parse(text);
   return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === text;
+}
+
+export function localCalendarDate(date = new Date()) {
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part, index) => String(part).padStart(index ? 2 : 4, '0')).join('-');
+}
+
+function readQuoteExtras(quote) {
+  const lump = readNumber(quote.extras);
+  const fees = {};
+  let invalid = quote.fees != null && (typeof quote.fees !== 'object' || Array.isArray(quote.fees));
+  if (quote.fees && !invalid) {
+    for (const [key, raw] of Object.entries(quote.fees)) {
+      const amount = readNumber(raw);
+      if (!Object.hasOwn(LOGISTICS_FEE_CATEGORIES, key) || amount.invalid) invalid = true;
+      else if (amount.value !== null) fees[key] = amount.value;
+    }
+  }
+  const complete = quote.feesComplete === true;
+  const hasFees = Object.keys(fees).length > 0;
+  if (!(hasFees || complete || invalid)) {
+    return {
+      total: lump.value, subtotal: lump.value ?? 0,
+      error: lump.invalid ? {
+        field: 'extras', message: '费用须为非负金额。金额未知时可留空，确认无额外费用时请填 0。',
+      } : null,
+    };
+  }
+  const subtotal = Object.values(fees).reduce((sum, amount) => sum + amount, 0);
+  let error = null;
+  if (lump.value !== null || lump.invalid) {
+    error = { field: 'extras', message: '附加费合计与明细只能填一种，请清除重复项。' };
+  } else if (invalid || subtotal > Number.MAX_SAFE_INTEGER) {
+    error = { field: 'fees', message: '附加费明细须为有效的非负金额，合计不能超出可比较范围。' };
+  } else if (complete && !hasFees) {
+    error = { field: 'fees', message: '请至少填写一项已核对的金额，确认无附加费可在合计栏填 0。' };
+  }
+  return { total: complete && !error ? subtotal : null, subtotal, fees, complete: complete && !error, error };
+}
+
+export function normalizeQuoteComparison(input) {
+  if (!input || !Array.isArray(input.quotes)) return null;
+  const from = scalar(input.shipment?.from).slice(0, 120);
+  const to = scalar(input.shipment?.to).slice(0, 120);
+  const load = scalar(input.shipment?.load).slice(0, 120);
+  const baseCurrency = currencyCode(input.baseCurrency);
+  const limit = readNumber(input.deliveryLimitDays);
+  if (!from || !to || !load || !FX_CURRENCIES.includes(baseCurrency) || limit.invalid) return null;
+
+  const quotes = [];
+  const ids = new Set();
+  for (const [index, quote] of input.quotes.slice(0, 8).entries()) {
+    if (!quote || typeof quote !== 'object' || Array.isArray(quote)) continue;
+    const id = scalar(quote.id).slice(0, 40) || String(index + 1);
+    const mode = scalar(quote.mode);
+    const scope = scalar(quote.scope) || 'unknown';
+    const currency = currencyCode(quote.currency);
+    const freight = readNumber(quote.freight);
+    const extra = readQuoteExtras(quote);
+    const transit = readNumber(quote.transitDays);
+    const handoffs = readNumber(quote.handoffs, { integer: true });
+    const expires = scalar(quote.expires);
+    if (ids.has(id) || !Object.hasOwn(LOGISTICS_MODES, mode) || !Object.hasOwn(LOGISTICS_SCOPES, scope) ||
+        !FX_CURRENCIES.includes(currency) || (freight.value === null && transit.value === null) ||
+        freight.invalid || extra.error || transit.invalid || handoffs.invalid || (expires && !validDate(expires))) continue;
+    ids.add(id);
+    quotes.push({
+      id, label: scalar(quote.label).slice(0, 100), mode, currency, scope, freight: freight.value,
+      extras: extra.fees ? null : extra.total, transitDays: transit.value, handoffs: handoffs.value, expires,
+      backup: quote.backup === true,
+      ...(extra.fees ? { fees: extra.fees, feesComplete: extra.complete } : {}),
+    });
+  }
+  if (quotes.length < 2) return null;
+  return { shipment: { from, to, load }, quotes, baseCurrency, deliveryLimitDays: limit.value };
 }
 
 function validRate(rate) {
@@ -127,7 +214,7 @@ function evaluateQuote(quote, index, baseCurrency, deliveryLimitDays, today, fx)
   const currency = currencyCode(quote.currency);
   const scope = scalar(quote.scope) || 'unknown';
   const freight = readNumber(quote.freight);
-  const extras = readNumber(quote.extras);
+  const extras = readQuoteExtras(quote);
   const transit = readNumber(quote.transitDays);
   const handoffs = readNumber(quote.handoffs, { integer: true });
   const backup = quote.backup === true || /^yes$/i.test(scalar(quote.backup));
@@ -139,8 +226,8 @@ function evaluateQuote(quote, index, baseCurrency, deliveryLimitDays, today, fx)
   if (!Object.hasOwn(LOGISTICS_SCOPES, scope)) error('scope', '请选择有效的服务范围。');
   if (scope === 'unknown') flag('scope-unknown', '确认报价起止点和承运人负责的服务范围。');
   if (freight.value === null) error('freight', '请填写有效的非负运输报价。');
-  if (extras.invalid) error('extras', '费用须为非负金额。金额未知时可留空，确认无额外费用时请填 0。');
-  else if (extras.value === null) flag('extras-unknown', '额外费用尚未确认，仅显示已知小计。');
+  if (extras.error) errors.push(extras.error);
+  else if (extras.total === null) flag('extras-unknown', '额外费用尚未确认，仅显示已知小计。');
   if (transit.invalid) error('transitDays', '运输时效须为非负天数。');
   else if (transit.value === null) flag('transit-unknown', '向承运人确认相同服务范围内的预计运输时效。');
   if (handoffs.invalid) error('handoffs', '交接次数须为非负整数。');
@@ -158,10 +245,10 @@ function evaluateQuote(quote, index, baseCurrency, deliveryLimitDays, today, fx)
     flag('quote-expired', '报价已过期，请向承运人更新。');
   } else expiryStatus = 'valid';
 
-  const subtotal = freight.value === null || extras.invalid ? null : freight.value + (extras.value ?? 0);
+  const subtotal = freight.value === null || extras.error ? null : freight.value + extras.subtotal;
   const knownCost = subtotal !== null && subtotal <= Number.MAX_SAFE_INTEGER ? subtotal : null;
   if (subtotal !== null && knownCost === null) error('freight', '费用合计超出可比较的金额范围。');
-  const costTotal = extras.value === null ? null : knownCost;
+  const costTotal = extras.total === null ? null : knownCost;
   const sameCurrency = Boolean(currency) && currency === baseCurrency;
   const fxDate = currency && baseCurrency && !sameCurrency && fx?.base === baseCurrency && validDate(fx.dates?.[currency])
     ? fx.dates[currency] : null;
@@ -185,7 +272,8 @@ function evaluateQuote(quote, index, baseCurrency, deliveryLimitDays, today, fx)
   if (deliveryStatus === 'late') flag('delivery-late', '预计运输时效超过填写的交付时限。');
 
   return {
-    id, label, mode, currency, scope, freight: freight.value, extras: extras.value,
+    id, label, mode, currency, scope, freight: freight.value, extras: extras.total,
+    ...(extras.fees ? { fees: extras.fees, feesComplete: extras.complete } : {}),
     transitDays: transit.value, handoffs: handoffs.value, backup, expires, expiryStatus,
     knownCost, costTotal, convertedKnownCost, convertedTotal, fxDate: rate === null ? null : fxDate,
     deliveryStatus, flags, errors,

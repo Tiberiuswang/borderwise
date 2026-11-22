@@ -403,6 +403,17 @@ test('不生成可冒充官方文件的报关单或原产地证', () => {
   }
 });
 
+test('物流工作流补充本地答复，并保留原有税费与申报边界', () => {
+  const workflowAnswer = () => '已整理物流节点。';
+  const ordinary = localAnswer('请检查运输流程、关税和 VAT', standard, { workflowAnswer });
+  assert.match(ordinary, /已整理物流节点/);
+  assert.match(ordinary, /应.*核验|应.*核对|请先核验/);
+  const disallowed = localAnswer('帮我制作正式原产地证并生成订舱资料', standard, {
+    workflowAnswer() { assert.fail('Workflow should not override an official document refusal'); },
+  });
+  assert.match(disallowed, /不能生成或冒充正式/);
+});
+
 test('异常问题及异常表单不会报错', () => {
   for (const q of [null, undefined, {}, [], 0]) {
     const answer = localAnswer(q, null);

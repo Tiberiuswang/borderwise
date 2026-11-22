@@ -1,5 +1,6 @@
 import { analyzeShipment, SOURCES } from '../../../docs/engine.js';
 import { lookupTariff } from '../../../docs/tariffs.js';
+import { limitResponseBody } from './response-body.mjs';
 
 const USITC = 'https://hts.usitc.gov';
 const HMRC = 'https://www.trade-tariff.service.gov.uk';
@@ -129,27 +130,6 @@ function validatedOrigin(origin) {
   }
 }
 
-function boundedResponse(response) {
-  if (!response.ok || !response.body) return response;
-  if (Number(response.headers.get('Content-Length')) > MAX_TARIFF_BYTES) {
-    void response.body.cancel().catch(() => {});
-    throw new Error('Tariff response exceeds the size limit');
-  }
-
-  let size = 0;
-  const stream = response.body.pipeThrough(new TransformStream({
-    transform(chunk, controller) {
-      size += chunk.byteLength;
-      if (size > MAX_TARIFF_BYTES) {
-        controller.error(new Error('Tariff response exceeds the size limit'));
-        return;
-      }
-      controller.enqueue(chunk);
-    },
-  }));
-  return new Response(stream, { status: response.status, headers: response.headers });
-}
-
 function tariffFetcher({ country, code, origin, fetchImpl }) {
   const path = '/api/tariffs/us?code=' + code;
   const resource = code.length === 10 ? 'commodities/' + code : 'headings/' + code.slice(0, 4);
@@ -170,7 +150,7 @@ function tariffFetcher({ country, code, origin, fetchImpl }) {
       void response.body?.cancel().catch(() => {});
       return new Response(null, { status: response.status });
     }
-    return boundedResponse(response);
+    return limitResponseBody(response, MAX_TARIFF_BYTES);
   };
 }
 

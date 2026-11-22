@@ -292,7 +292,7 @@ export function getLocalFollowUps(question, input = {}) {
 }
 
 
-export function localAnswer(question, input = {}) {
+export function localAnswer(question, input = {}, { workflowAnswer } = {}) {
   const q = scalar(question).toLowerCase();
   const s = normalize(input);
   
@@ -304,6 +304,7 @@ export function localAnswer(question, input = {}) {
   }
 
   const answers = [];
+  const operations = workflowAnswer?.();
   const asksGaps = asksShipmentGaps(q);
   if (QUESTION_TOPICS.safety.test(q)) {
     answers.push('不能保证通关，也不能仅凭本地检查认定安全或合规。请先补齐商品、交易方、原产地和文件信息，再向报关专业人士与适用主管机关核验。');
@@ -330,17 +331,18 @@ export function localAnswer(question, input = {}) {
   if (QUESTION_TOPICS.duties.test(q)) {
     answers.push('本工具不提供实时税率、汇率或税费计算。请先核验目的地、商品编码、原产地、货值和贸易术语，再向目的地海关或专业报关人员查询适用税费与估价规则。');
   }
-  if (!asksGaps && QUESTION_TOPICS.documents.test(q)) {
+  if (!operations && !asksGaps && QUESTION_TOPICS.documents.test(q)) {
     const hint = provided(s.documents) ? `表单已填写单证清单，但未核实实际文件：${s.documents}。` : '表单尚未列出可核对的单证。';
     answers.push(`${hint}可先准备真实合同、商业发票和装箱资料，核对交易方、品名、数量、金额和产地，再确认实际所需许可或证明；这里只提供待办，不出具正式文件。`);
   }
-  if (QUESTION_TOPICS.incoterm.test(q)) {
+  if (!operations && QUESTION_TOPICS.incoterm.test(q)) {
     const hint = provided(s.incoterm) ? `表单填写的贸易术语为“${s.incoterm}”。` : '表单尚未填写贸易术语。';
     answers.push(`${hint}请核对合同采用的术语版本和指定地点，并与交易方确认运输、保险、费用及报关分工。`);
   }
   if (QUESTION_TOPICS.transport.test(q)) {
     answers.push('请根据实际运输方式、商品规格及包装情况向承运人确认运输条件、所需检测和单证。涉及电池或化学品时，尤其需要提供真实技术资料；关键词本身不能判定危险品分类。');
   }
+  if (operations) answers.push(operations);
   if (!answers.length) {
     const result = analyzeShipment(s);
     const priority = result.checks.filter(item => item.level === 'high').slice(0, 3);

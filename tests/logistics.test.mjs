@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   compareLogistics, fetchFxRates, FX_CURRENCIES, FX_SOURCE, LOGISTICS_MODES, LOGISTICS_SCOPES,
+  normalizeQuoteComparison,
 } from '../docs/logistics.js';
 
 const shipment = { from: '上海仓库', to: '汉堡仓库', load: '1 箱' };
@@ -71,6 +72,75 @@ test('keeps unknown extras and transit separate from explicit zero', () => {
   assert.equal(result.fastest.id, 'zero');
   assert.ok(flags(result).includes('cost-subset'));
   assert.ok(flags(result).includes('time-subset'));
+});
+
+test('itemized fees contribute to a subtotal until all applicable fees are confirmed', () => {
+  const itemized = { ...sample, extras: '', fees: { terminalHandling: '25.50', fuel: 0, insurance: '' } };
+  const result = compare([
+    { ...itemized, id: 'partial' },
+    { ...itemized, id: 'complete', feesComplete: true },
+    { ...itemized, id: 'all-zero', fees: { insurance: '0' }, feesComplete: true },
+  ]);
+  const [partial, complete, zero] = result.options;
+
+  assert.deepEqual(partial.fees, { terminalHandling: 25.5, fuel: 0 });
+  assert.equal(partial.feesComplete, false);
+  assert.equal(partial.extras, null);
+  assert.equal(partial.knownCost, 281);
+  assert.equal(partial.costTotal, null);
+  assert.ok(flags(partial).includes('extras-unknown'));
+  assert.equal(complete.feesComplete, true);
+  assert.equal(complete.extras, 25.5);
+  assert.equal(complete.costTotal, 281);
+  assert.equal(zero.extras, 0);
+  assert.equal(zero.costTotal, 255.5);
+  assert.equal(result.cheapest.id, 'all-zero');
+});
+
+test('rejects conflicting totals, invalid fee categories and empty fee confirmations', () => {
+  const result = compare([
+    { ...sample, extras: 0, fees: { drayage: 10 } },
+    { ...sample, id: 'invalid fee', extras: '', fees: { detention: -1, salesTax: 5 } },
+    { ...sample, id: 'missing fees', extras: '', feesComplete: true, fees: { storage: '' } },
+    { ...sample, id: 'fees too high', extras: '', fees: { clearance: Number.MAX_SAFE_INTEGER, storage: 1 } },
+  ]);
+
+  assert.deepEqual(result.options.map(errorFields), [['extras'], ['fees'], ['fees'], ['fees']]);
+  for (const option of result.options) {
+    assert.equal(option.costTotal, null);
+    assert.equal(option.knownCost, null);
+  }
+  assert.equal(result.cheapest, null);
+});
+
+test('normalizes only bounded comparable inputs and preserves unknown and zero values', () => {
+  const cost = { ...sample, label: 'x'.repeat(110), freight: '0', extras: '0', rowNote: 'ignore' };
+  const transit = {
+    ...sample, id: 'duration', freight: '', transitDays: 0, handoffs: '', extras: '',
+    fees: { drayage: ' 3.50 ', storage: '0', clearance: '' }, currency: 'eur', backup: false,
+  };
+  const comparison = {
+    shipment: { ...shipment, from: ` ${'起'.repeat(121)} `, secret: 'ignore' }, baseCurrency: 'usd',
+    deliveryLimitDays: '3', fx, today, quotes: [cost, cost, { ...cost, id: 'malformed', expires: 'no' }, transit],
+  };
+
+  const normalized = normalizeQuoteComparison(comparison);
+  assert.deepEqual(normalized, {
+    shipment: { from: '起'.repeat(120), to: shipment.to, load: shipment.load }, baseCurrency: 'USD', deliveryLimitDays: 3,
+    quotes: [
+      { id: 'sea', label: 'x'.repeat(100), mode: 'ocean', currency: 'USD', scope: 'door-to-door',
+        freight: 0, extras: 0, transitDays: 14, handoffs: 1, expires: '', backup: true },
+      { id: 'duration', label: sample.label, mode: 'ocean', currency: 'EUR', scope: 'door-to-door',
+        freight: null, extras: null, transitDays: 0, handoffs: null, expires: '', backup: false,
+        fees: { drayage: 3.5, storage: 0 }, feesComplete: false },
+    ],
+  });
+  assert.deepEqual(normalizeQuoteComparison(normalized), normalized);
+  assert.equal(normalizeQuoteComparison({ ...comparison, shipment: { ...shipment, load: '' } }), null);
+  assert.equal(normalizeQuoteComparison({ ...comparison, quotes: [cost, { ...cost, id: 'blank', freight: '', transitDays: '' }] }), null);
+  assert.equal(normalizeQuoteComparison({ ...comparison, quotes: [cost, { ...cost, id: 'invalid', fees: { fuel: 1 } }] }), null);
+  assert.equal(normalizeQuoteComparison({ ...comparison, deliveryLimitDays: -1 }), null);
+  assert.equal(normalizeQuoteComparison({ ...comparison, quotes: Array.from({ length: 10 }, (_, i) => ({ ...cost, id: i })) }).quotes.length, 8);
 });
 
 test('reports invalid numbers with fields and does not convert them to zero', () => {

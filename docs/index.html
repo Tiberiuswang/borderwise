@@ -8,6 +8,7 @@
   <title>Borderwise · 跨境合规工作台</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./entrance.css">
+  <link rel="stylesheet" href="./shipment-workflow.css">
   <link rel="icon" href="./favicon-tree.png" type="image/png">
 </head>
 <body>
@@ -42,6 +43,7 @@
       <button class="nav-item active" id="navChat" aria-current="page"><span class="icon" data-icon="message"></span>合规助手<span class="nav-indicator"></span></button>
       <button class="nav-item" id="navForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
       <button class="nav-item" id="navPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
+      <button class="nav-item" id="navWorkflow"><span class="icon" data-icon="package"></span>物流执行</button>
       <button class="nav-item" id="navSources"><span class="icon" data-icon="globe"></span>官方资料库<span class="nav-external">↗</span></button>
     </nav>
     <section id="recentCase" aria-labelledby="historyLabel" hidden>
@@ -88,6 +90,11 @@
                 <button class="workbench-tool" type="button" id="toolPlanning">
                   <span class="icon" data-icon="route"></span>
                   <strong>关税与运输比价</strong>
+                  <span class="tool-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button class="workbench-tool" type="button" id="toolWorkflow">
+                  <span class="icon" data-icon="package"></span>
+                  <strong>物流执行</strong>
                   <span class="tool-arrow" aria-hidden="true">↗</span>
                 </button>
                 <button class="workbench-tool" type="button" id="toolSources">
@@ -169,6 +176,7 @@
       <button type="button" data-search-target="navChat" data-search-terms="提问 问答 对话 chat"><span class="icon" data-icon="message"></span>合规助手<span aria-hidden="true">↗</span></button>
       <button type="button" data-search-target="navForm" data-search-terms="填入 货物 资料 HS 清单 report"><span class="icon" data-icon="file"></span>报关资料检查<span aria-hidden="true">↗</span></button>
       <button type="button" data-search-target="navPlanning" data-search-terms="税率 海运 物流 报价 HS tariff shipping"><span class="icon" data-icon="route"></span>关税与运输比价<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="navWorkflow" data-search-terms="订舱 拖车 单证 交付 物流 异常 Incoterms 询价"><span class="icon" data-icon="package"></span>物流执行<span aria-hidden="true">↗</span></button>
       <button type="button" data-search-target="navSources" data-search-terms="政策 海关 法规 来源 OFAC"><span class="icon" data-icon="globe"></span>官方资料库<span aria-hidden="true">↗</span></button>
       <button type="button" data-search-target="openSettings" data-search-terms="worker ai 配置 清除 模式"><span class="icon" data-icon="settings"></span>设置与数据<span aria-hidden="true">↗</span></button>
     </div>
@@ -232,7 +240,7 @@
   </section>
   <section id="tradeLogisticsSection" aria-labelledby="tradeLogisticsTitle" hidden>
     <h3 class="sr-only" id="tradeLogisticsTitle">运输方案与风险</h3>
-    <p class="planning-help">将同一货量、同一起讫点的承运商报价录入下方。报价与货物明细在浏览器内比较，跨币种时仅联网获取所选币种的参考汇率。</p>
+    <p class="planning-help">录入同一起讫点、同一货量的报价。本地比价仅联网换算币种，也可将实际报价交给已连接的 AI 分析。</p>
     <form id="tradeLogisticsForm">
       <div class="form-grid planning-fields">
         <label>起点 <input name="from" maxlength="120" placeholder="港口、机场或城市"></label>
@@ -250,6 +258,7 @@
       <div class="planning-actions">
         <button type="button" class="secondary-button" id="addQuote">添加方案</button>
         <button type="button" class="secondary-button" id="fillPlanningExample">填入演示报价</button>
+        <button type="button" class="secondary-button" id="askAgentAboutQuotes">让 AI 分析报价</button>
         <button type="submit" class="primary-button" id="compareQuotes">比较成本与时效</button>
       </div>
     </form>
@@ -277,6 +286,8 @@
   </fieldset>
 </template>
 
+<section class="dialog" id="workflowDialog" role="dialog" aria-modal="true" aria-labelledby="workflowDialogTitle" hidden></section>
+
 <section class="dialog compact-dialog" id="sourcesDialog" role="dialog" aria-modal="true" aria-labelledby="sourcesTitle" hidden>
   <div class="dialog-header"><div><h2 id="sourcesTitle">官方资料库</h2><p>这些是官方查询入口，需结合商品、交易主体和时间逐项核实。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
   <div class="resource-list">
@@ -295,7 +306,7 @@
       <label>Worker 地址 <input name="url" type="url" placeholder="https://your-worker.workers.dev" maxlength="500"></label>
       <label>访问口令 <input name="token" type="password" placeholder="你为 Worker 设置的 APP_TOKEN" autocomplete="off" maxlength="300"></label>
     </div>
-    <div class="setting-block"><strong>本地数据</strong><p>表单和清单保存在本浏览器。对话保存在当前标签页，刷新后可恢复。AI 模式会将问题和相关上下文发送至所配置的服务。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
+    <div class="setting-block"><strong>本地数据</strong><p>货物资料、清单和物流记录保存在本浏览器。对话保存在当前标签页。AI 模式会把对应问题的货物资料、物流记录或实际报价发送至所配置的服务。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
     <div class="dialog-actions"><button type="submit" class="primary-button">保存设置 <span>→</span></button></div>
   </form>
 </section>

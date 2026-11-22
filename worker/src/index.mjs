@@ -2,12 +2,14 @@ import { runAgent } from './application/agent-service.mjs';
 import { createModelClient } from './adapters/model-client.mjs';
 import { createRequestSessionStore } from './adapters/session-store.mjs';
 import { createTradeTools } from './adapters/trade-tools.mjs';
+import { createLogisticsTools } from './adapters/logistics-tools.mjs';
 import { buildSystemPrompt } from './domain/instructions.mjs';
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_QUESTION_CHARS = 2000; 
 const MAX_SHIPMENT_BYTES = 16 * 1024;
 const MAX_REPORT_BYTES = 32 * 1024;
+const MAX_LOGISTICS_BYTES = 8 * 1024;
 const UPSTREAM_TIMEOUT_MS = 30_000;
 const encoder = new TextEncoder();
 
@@ -169,23 +171,32 @@ async function handle(request, env) {
   }
   const shipment = payload.shipment ?? null;
   const report = payload.report ?? null;
+  const useTools = payload.protocol === 2;
+  const logistics = useTools ? payload.logistics ?? null : null;
   if (!validContext(shipment) || !validContext(report)) {
     return response(400, { error: 'shipment 和 report 应为对象、数组、字符串或 null。' }, origin);
   }
+  if (logistics !== null && (typeof logistics !== 'object' || Array.isArray(logistics))) {
+    return response(400, { error: 'logistics 应为对象或 null。' }, origin);
+  }
   try {
-    if (contextSize(shipment) > MAX_SHIPMENT_BYTES || contextSize(report) > MAX_REPORT_BYTES) {
+    if (contextSize(shipment) > MAX_SHIPMENT_BYTES || contextSize(report) > MAX_REPORT_BYTES ||
+        contextSize(logistics) > MAX_LOGISTICS_BYTES) {
       return response(400, { error: '上下文过长，请删减货件资料或报告。' }, origin);
     }
   } catch {
     return response(400, { error: '上下文格式过于复杂，请简化后重试。' }, origin);
   }
 
-  const useTools = payload.protocol === 2;
-  const context = { question: payload.question.trim(), shipment, report };
+  const messageContext = { question: payload.question.trim(), shipment, report };
+  if (logistics) {
+    messageContext.logistics = { hasWorkflow: Boolean(logistics.workflow), hasQuotes: Boolean(logistics.comparison) };
+  }
+  const context = { ...messageContext, logistics };
   const messages = [
     { role: 'system', content: buildSystemPrompt(useTools) },
     ...history,
-    { role: 'user', content: JSON.stringify(context) },
+    { role: 'user', content: JSON.stringify(messageContext) },
   ];
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
@@ -196,7 +207,7 @@ async function handle(request, env) {
       result = await runAgent({
         client,
         store: createRequestSessionStore(messages),
-        tools: createTradeTools({ origin: allowedOrigin }),
+        tools: [...createTradeTools({ origin: allowedOrigin }), ...createLogisticsTools()],
         context,
         signal,
       });

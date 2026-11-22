@@ -1,5 +1,8 @@
 import { lookupTariff } from './tariffs.js';
-import { FX_CURRENCIES, FX_SOURCE, LOGISTICS_MODES, LOGISTICS_SCOPES, compareLogistics, fetchFxRates } from './logistics.js';
+import {
+  FX_CURRENCIES, FX_SOURCE, LOGISTICS_FEE_CATEGORIES, LOGISTICS_MODES, LOGISTICS_SCOPES,
+  compareLogistics, fetchFxRates, localCalendarDate, normalizeQuoteComparison,
+} from './logistics.js';
 
 const markets = {
   US: { name: '美国海关税则（USITC）', url: 'https://hts.usitc.gov/' },
@@ -35,12 +38,6 @@ function marketFor(destination) {
 function quoteCurrency(currency) {
   const code = (currency || '').trim().toUpperCase();
   return FX_CURRENCIES.includes(code) ? code : 'USD';
-}
-
-function calendarDate() {
-  const today = new Date();
-  return [today.getFullYear(), today.getMonth() + 1, today.getDate()]
-    .map((part, index) => String(part).padStart(index ? 2 : 4, '0')).join('-');
 }
 
 function formatMoney(amount, currency) {
@@ -125,6 +122,11 @@ function renderComparison(result, basis, demo) {
     } else if (option.knownCost != null) {
       item.append(element('p', `已知费用 · ${formatMoney(option.knownCost, option.currency)}（总额待补）`, 'quote-total'));
     }
+    if (option.fees && !option.errors.some(error => ['extras', 'fees'].includes(error.field))) {
+      const fees = Object.entries(option.fees).map(([key, amount]) =>
+        `${LOGISTICS_FEE_CATEGORIES[key]} ${formatMoney(amount, option.currency)}`);
+      item.append(element('p', fees.join(' · '), 'planning-help'));
+    }
     const converted = option.convertedTotal ?? option.convertedKnownCost;
     if (converted != null && option.currency !== result.baseCurrency) {
       item.append(element('p', `参考折算 · ${formatMoney(converted, result.baseCurrency)}${option.fxDate ? ' · ' + option.fxDate : ''}`, 'planning-help'));
@@ -137,6 +139,35 @@ function renderComparison(result, basis, demo) {
     fragment.append(item);
   }
   return fragment;
+}
+
+function quoteFeeFields(values) {
+  const details = element('details', '', 'full');
+  details.append(
+    element('summary', '填写附加费明细'),
+    element('p', '合计和明细二选一，金额使用报价币种。未知可留空，确认无费用填 0。', 'planning-help'),
+  );
+  const fields = element('div', '', 'form-grid');
+  for (const [key, title] of Object.entries(LOGISTICS_FEE_CATEGORIES)) {
+    const label = element('label', title);
+    const input = element('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = 'any';
+    input.value = values.fees?.[key] ?? '';
+    input.dataset.quoteFee = key;
+    label.append(input);
+    fields.append(label);
+  }
+  const confirmation = element('label', '', 'quote-checkbox full');
+  const checkbox = element('input');
+  checkbox.type = 'checkbox';
+  checkbox.dataset.quote = 'feesComplete';
+  checkbox.checked = values.feesComplete === true;
+  confirmation.append(checkbox, '已核对全部适用附加费');
+  fields.append(confirmation);
+  details.append(fields);
+  return details;
 }
 
 export function createTradePlanner(initialShipment = {}) {
@@ -153,6 +184,11 @@ export function createTradePlanner(initialShipment = {}) {
   const officialLink = get('#tariffOfficialLink');
   const lookup = get('#lookupTariff');
   const compare = get('#compareQuotes');
+  const fillExample = get('#fillPlanningExample');
+  const clearExample = element('button', '清空演示', 'secondary-button');
+  clearExample.type = 'button';
+  clearExample.hidden = true;
+  fillExample.after(clearExample);
   const currencies = FX_CURRENCIES.map(code => [code, code]);
   let shipment;
   let tariffRequest;
@@ -207,6 +243,7 @@ export function createTradePlanner(initialShipment = {}) {
       inputs[key].value = values[key] ?? '';
     }
     inputs.backup.checked = Boolean(values.backup);
+    row.querySelector('.form-grid').append(quoteFeeFields(values));
     row.querySelector('.quote-remove').addEventListener('click', () => {
       row.remove();
       refreshQuoteControls();
@@ -218,25 +255,50 @@ export function createTradePlanner(initialShipment = {}) {
     if (focus) inputs.label.focus();
   }
 
-  function setShipment(nextShipment, force = false) {
-    if (!force && shipment === nextShipment) return;
-    shipment = nextShipment;
+  function resetLogistics() {
     demo = false;
-    tariffs.reset();
+    clearExample.hidden = true;
     logistics.reset();
-    tariffs.elements.destination.value = marketFor(shipment.destination);
-    tariffs.elements.code.value = shipment.hs || '';
     logistics.elements.from.value = shipment.exportCountry || shipment.origin || '';
     logistics.elements.to.value = shipment.destination || '';
     setOptions(logistics.elements.baseCurrency, currencies, quoteCurrency(shipment.currency));
     quoteList.replaceChildren();
     addQuote();
     addQuote({ mode: 'multimodal' });
-    invalidateTariffs();
     invalidateComparison();
+  }
+
+  function setShipment(nextShipment, force = false) {
+    if (!force && shipment === nextShipment) return;
+    shipment = nextShipment;
+    tariffs.reset();
+    tariffs.elements.destination.value = marketFor(shipment.destination);
+    tariffs.elements.code.value = shipment.hs || '';
+    invalidateTariffs();
+    resetLogistics();
     get('#planningContext').textContent = shipment.product
       ? `当前货物 · ${shipment.product}`
       : '按目的市场查税率，用同一票货的报价对比运输方案。';
+  }
+
+  function readComparison() {
+    const { from, to, load, deliveryLimitDays, baseCurrency } = Object.fromEntries(new FormData(logistics));
+    const quotes = [...quoteList.children].map(row => ({
+      id: row.dataset.id,
+      ...Object.fromEntries([...row.querySelectorAll('[data-quote]')].map(input => [
+        input.dataset.quote, input.type === 'checkbox' ? input.checked : input.value,
+      ])),
+      fees: Object.fromEntries([...row.querySelectorAll('[data-quote-fee]')].map(input => [input.dataset.quoteFee, input.value])),
+    })).filter(quote => quote.freight !== '' || quote.transitDays !== '');
+    return {
+      shipment: { from: from.trim(), to: to.trim(), load: load.trim() },
+      quotes, baseCurrency, deliveryLimitDays,
+    };
+  }
+
+  function snapshot() {
+    if (demo || !logistics.checkValidity()) return null;
+    return normalizeQuoteComparison(readComparison());
   }
 
   for (const button of tabs) button.addEventListener('click', () => activate(button.dataset.planningTab));
@@ -246,9 +308,10 @@ export function createTradePlanner(initialShipment = {}) {
     addQuote({}, true);
     invalidateComparison();
   });
-  get('#fillPlanningExample').addEventListener('click', () => {
+  fillExample.addEventListener('click', () => {
     invalidateComparison();
     demo = true;
+    clearExample.hidden = false;
     logistics.elements.from.value = '上海';
     logistics.elements.to.value = '鹿特丹';
     logistics.elements.load.value = '1 × 40HQ';
@@ -258,6 +321,10 @@ export function createTradePlanner(initialShipment = {}) {
     addQuote({ label: '演示 · 全程海运', mode: 'ocean', scope: 'door-to-door', currency: 'USD', freight: 2900, extras: 750, transitDays: 38, handoffs: 1 });
     addQuote({ label: '演示 · 铁路＋公路', mode: 'multimodal', scope: 'door-to-door', currency: 'USD', freight: 3900, extras: 500, transitDays: 22, handoffs: 3, backup: true });
     logisticsStatus.textContent = '已填入演示报价。';
+  });
+  clearExample.addEventListener('click', () => {
+    resetLogistics();
+    logistics.elements.from.focus();
   });
 
   tariffs.addEventListener('submit', async event => {
@@ -301,18 +368,11 @@ export function createTradePlanner(initialShipment = {}) {
   logistics.addEventListener('submit', async event => {
     event.preventDefault();
     invalidateComparison();
-    const { from, to, load, deliveryLimitDays, baseCurrency } = Object.fromEntries(new FormData(logistics));
-    const basis = { from: from.trim(), to: to.trim(), load: load.trim() };
+    const { shipment: basis, quotes, baseCurrency, deliveryLimitDays } = readComparison();
     if (Object.values(basis).some(value => !value)) {
       logisticsStatus.textContent = '请填写共同起点、终点和货量，确认各报价基于同一票货。';
       return;
     }
-    const quotes = [...quoteList.children].map(row => ({
-      id: row.dataset.id,
-      ...Object.fromEntries([...row.querySelectorAll('[data-quote]')].map(input => [
-        input.dataset.quote, input.type === 'checkbox' ? input.checked : input.value,
-      ])),
-    })).filter(quote => quote.freight !== '' || quote.transitDays !== '');
     if (quotes.length < 2) {
       logisticsStatus.textContent = '请至少为两个方案填写运费或时效。';
       return;
@@ -339,7 +399,7 @@ export function createTradePlanner(initialShipment = {}) {
     }
     const result = compareLogistics({
       shipment: { ...shipment, ...basis },
-      quotes, baseCurrency, deliveryLimitDays, today: calendarDate(), fx,
+      quotes, baseCurrency, deliveryLimitDays, today: localCalendarDate(), fx,
     });
     logisticsResults.append(renderComparison(result, basis, demo));
     logisticsStatus.textContent = fxNote || '已比较所填方案。';
@@ -354,5 +414,5 @@ export function createTradePlanner(initialShipment = {}) {
   });
 
   setShipment(initialShipment, true);
-  return { activate, setShipment };
+  return { activate, setShipment, snapshot };
 }

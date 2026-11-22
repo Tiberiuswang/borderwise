@@ -274,8 +274,11 @@ a { color: inherit; text-decoration: none; }
 .workbench-tools { margin-top: 22px; }
 .workbench-tool-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+@media (min-width: 1280px) {
+  .workbench-tool-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 .workbench-tool {
@@ -295,6 +298,7 @@ a { color: inherit; text-decoration: none; }
 .workbench-tool:hover { border-color: #585d66; background: #26282d; }
 .workbench-tool > .icon { color: #e0bb79; }
 #toolPlanning > .icon { color: #86cbb0; }
+#toolWorkflow > .icon { color: #b4a9dd; }
 #toolSources > .icon { color: #9ab8ee; }
 .workbench-tool strong { font-size: 14px; overflow-wrap: anywhere; }
 .tool-arrow { color: var(--action); }
