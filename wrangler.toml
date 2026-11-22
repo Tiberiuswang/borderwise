@@ -1,0 +1,7 @@
+name = "borderwise"
+pages_build_output_dir = "./docs"
+compatibility_date = "2025-01-01"
+
+[[services]]
+binding = "BORDERWISE_AI"
+service = "borderwise-ai-proxy"

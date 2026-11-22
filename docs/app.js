@@ -25,9 +25,10 @@ const setStored = (key, value) => { try { localStorage.setItem(key, JSON.stringi
 let report = getStored(STORAGE.report) || null;
 let shipment = report?.input || getStored(STORAGE.shipment) || {};
 const savedSettings = getStored(STORAGE.settings) || {};
-const defaultUrl = typeof AI_CONFIG.url === 'string' ? AI_CONFIG.url.trim().replace(/\/$/, '') : '';
-let settings = { url: savedSettings.url || defaultUrl, enabled: typeof savedSettings.enabled === 'boolean' ? savedSettings.enabled : Boolean(AI_CONFIG.enabled && defaultUrl), token: '' };
+const workerUrl = new URL(AI_CONFIG.url, location.href).href;
+let settings = { enabled: savedSettings.enabled === true, token: '' };
 let activeReply = null;
+let activeVerification = null;
 const sessionStore = createSessionStore();
 const checkPriority = { high: 0, medium: 1, info: 2 };
 let previousFocus = null;
@@ -76,6 +77,7 @@ function openDialog(id, focusSelector = 'input:not([type=checkbox]), button') {
 }
 function closeDialogs(restoreFocus = true) {
   dialogIds.forEach(id => { $(`#${id}`).hidden = true; });
+  cancelVerification();
   $('#settingsForm').elements.token.value = '';
   $('#overlay').hidden = true;
   const dialogWasOpen = $('.app-shell').inert;
@@ -103,11 +105,23 @@ function showWorkflow() {
 }
 function showSources() { openDialog('sourcesDialog'); }
 function showSettings() {
-  const form = $('#settingsForm');
-  openDialog('settingsDialog');
-  form.elements.url.value = settings.url;
-  form.elements.enabled.checked = settings.enabled;
-  form.elements.token.value = settings.token;
+  openDialog('settingsDialog', 'input[name="token"]');
+  $('#settingsForm').elements.url.value = workerUrl;
+  $('#disconnectAI').hidden = !canUseAI();
+  connectionStatus(canUseAI() ? 'AI 已连接' : '');
+}
+
+function connectionStatus(text, isError = false) {
+  const status = $('#connectionStatus');
+  status.textContent = text;
+  status.classList.toggle('is-error', isError);
+}
+
+function cancelVerification() {
+  activeVerification?.abort();
+  activeVerification = null;
+  $('#connectAI').disabled = false;
+  $('#settingsForm').elements.token.readOnly = false;
 }
 
 const toolSearchInput = $('#toolSearchInput');
@@ -257,7 +271,7 @@ function addReport(current, shouldScroll = true) {
   if (shouldScroll) scrollToMessage(node);
 }
 function canUseAI() {
-  return Boolean(settings.enabled && settings.url && (AI_CONFIG.publicAccess || settings.token));
+  return Boolean(settings.enabled && settings.token);
 }
 
 function updateMode() {
@@ -470,17 +484,19 @@ async function sendQuestion(question) {
   const message = addMessage('assistant', '正在整理待核验事项…');
   message.mode.textContent = 'AI 助手';
   message.node.classList.add('pending');
-  const { url, token } = settings;
+  const { token } = settings;
   const savedQuestion = redactToken(content, token);
   try {
     const reportContext = report && { checks: report.checks, generatedAt: report.generatedAt, input: report.input };
     const logistics = logisticsContextFor(content);
-    const response = await fetch(url, {
+    const response = await fetch(workerUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      credentials: 'omit',
+      redirect: 'error',
       body: JSON.stringify({
         protocol: 2, question: savedQuestion, shipment: currentShipment, report: reportContext,
-        history: sessionStore.history(url), logistics,
+        history: sessionStore.history(workerUrl), logistics,
       }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
     });
@@ -490,7 +506,7 @@ async function sendQuestion(question) {
     const answer = redactToken(payload.answer, token);
     const { body, followUps } = splitFollowUps(answer.trim());
     if (!body) throw new Error('AI 服务未返回有效内容。');
-    const turn = { question: savedQuestion, answer: body, mode: 'ai', scope: url, steps: payload.steps, sources: payload.sources };
+    const turn = { question: savedQuestion, answer: body, mode: 'ai', scope: workerUrl, steps: payload.steps, sources: payload.sources };
     if (!sessionStore.append(turn, token)) throw new Error('AI 服务未返回有效内容。');
     showModelAnswer(message, sessionStore.turns().at(-1));
     addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
@@ -643,25 +659,70 @@ $('#viewReview').addEventListener('click', () => {
   heading.focus({ preventScroll: true });
   scrollToMessage(heading.closest('.message'));
 });
-$('#settingsForm').addEventListener('submit', event => {
-  event.preventDefault(); const form = event.currentTarget; const enabled = form.elements.enabled.checked; const url = form.elements.url.value.trim().replace(/\/$/, ''); const token = form.elements.token.value;
-  if (enabled) {
-    if (/(?:^|\.)github\.io$/i.test(location.hostname)) { toast('GitHub Pages 不适合发送访问口令；请改用其他合适的静态托管。'); return; }
-    let parsed; try { parsed = new URL(url); } catch { toast('请填写有效的 Worker 地址'); return; }
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && ['localhost','127.0.0.1'].includes(parsed.hostname))) { toast('请使用 HTTPS Worker 地址'); return; }
-    if (parsed.username || parsed.password) { toast('Worker 地址中不能包含账号或密码'); return; }
+$('#settingsForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (activeVerification) return;
+  if (!window.isSecureContext || /(?:^|\.)github\.io$/i.test(location.hostname)) {
+    connectionStatus('请在 Borderwise 的 Cloudflare 站点验证 Token。', true);
+    return;
   }
-  if ((token || (enabled && !AI_CONFIG.publicAccess)) && !/^[\x21-\x7e]{1,300}$/.test(token)) { toast('访问口令须为 1–300 位无空格的可打印 ASCII 字符'); return; }
-  if (enabled && !AI_CONFIG.publicAccess && !token) { toast('请填写 Worker 访问口令，或在 ai-config.js 中确认公开访客模式'); return; }
+  const tokenInput = event.currentTarget.elements.token;
+  const token = tokenInput.value;
+  if (!/^[\x21-\x7e]{1,512}$/.test(token)) {
+    connectionStatus('请输入 1–512 位无空格的 ASCII Token。', true);
+    tokenInput.focus();
+    return;
+  }
+
+  const controller = new AbortController();
+  activeVerification = controller;
+  $('#connectAI').disabled = true;
+  tokenInput.readOnly = true;
+  connectionStatus('正在验证 Token…');
+  try {
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'verify_token' }),
+      credentials: 'omit',
+      redirect: 'error',
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
+    });
+    if (activeVerification !== controller) return;
+    if (response.status === 401) {
+      connectionStatus('Token 无效，请核对后重试。', true);
+      tokenInput.focus();
+      return;
+    }
+    if (!response.ok || (await response.json())?.verified !== true) throw new Error('Token verification unavailable');
+    if (activeVerification !== controller) return;
+
+    activeReply?.abort();
+    settings = { enabled: true, token };
+    setStored(STORAGE.settings, { enabled: true });
+    updateMode();
+    closeDialogs();
+    toast('Token 已验证，AI 已连接');
+  } catch {
+    if (activeVerification === controller) connectionStatus('暂时无法验证 Token，请稍后重试。', true);
+  } finally {
+    if (activeVerification === controller) cancelVerification();
+  }
+});
+$('#disconnectAI').addEventListener('click', () => {
   activeReply?.abort();
-  settings = { enabled, url, token }; setStored(STORAGE.settings, { url, enabled }); updateMode(); closeDialogs(); toast(enabled ? 'AI 模式已启用，请注意数据会发送至服务商' : '已切换到本地模式');
+  settings = { enabled: false, token: '' };
+  setStored(STORAGE.settings, { enabled: false });
+  updateMode();
+  closeDialogs();
+  toast('已切换到本地模式');
 });
 $('#clearData').addEventListener('click', () => {
   if (!window.confirm('确定清除货物资料、清单、物流资料、设置和当前标签页的对话？此操作不可撤销。')) return;
   activeReply?.abort();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
   sessionStore.clear();
-  shipment = {}; report = null; settings = { enabled:false, url:'', token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  shipment = {}; report = null; settings = { enabled:false, token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
   planner.setShipment(shipment);
   workflow.clear();
   workflow.setShipment(shipment);

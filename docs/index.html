@@ -300,14 +300,18 @@
 </section>
 
 <section class="dialog compact-dialog" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
-  <div class="dialog-header"><div><h2 id="settingsTitle">设置与数据</h2><p>可按部署配置默认进入 AI 模式，也可随时切回本地辅助模式。</p></div><button class="close-button" data-close aria-label="关闭">×</button></div>
+  <div class="dialog-header"><div><h2 id="settingsTitle">设置与数据</h2></div><button class="close-button" data-close aria-label="关闭">×</button></div>
   <form id="settingsForm" class="settings-form">
-    <div class="setting-block"><div class="setting-title"><div><strong>可选：连接 AI 服务</strong><p>连接你自己部署的代理后，对话才会调用模型。</p></div><label class="switch"><input type="checkbox" name="enabled" aria-label="启用 AI 服务"><span></span></label></div>
-      <label>Worker 地址 <input name="url" type="url" placeholder="https://your-worker.workers.dev" maxlength="500"></label>
-      <label>访问口令 <input name="token" type="password" placeholder="你为 Worker 设置的 APP_TOKEN" autocomplete="off" maxlength="300"></label>
+    <div class="setting-block">
+      <label>Worker 地址 <input name="url" type="url" readonly></label>
+      <label>访问 Token <input name="token" type="password" placeholder="输入 Worker 的 APP_TOKEN" aria-describedby="connectionStatus" autocomplete="off" maxlength="512" required></label>
+      <p id="connectionStatus" class="connection-status" role="status"></p>
     </div>
     <div class="setting-block"><strong>本地数据</strong><p>货物资料、清单和物流记录保存在本浏览器。对话保存在当前标签页。AI 模式会把对应问题的货物资料、物流记录或实际报价发送至所配置的服务。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
-    <div class="dialog-actions"><button type="submit" class="primary-button">保存设置 <span>→</span></button></div>
+    <div class="dialog-actions">
+      <button type="button" class="secondary-button" id="disconnectAI" hidden>断开 AI</button>
+      <button type="submit" class="primary-button" id="connectAI">验证并连接</button>
+    </div>
   </form>
 </section>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

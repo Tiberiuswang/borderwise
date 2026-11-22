@@ -43,4 +43,6 @@ Worker `POST` 接口接受 `question`、`shipment`、`report` 和 `history`。�
 
 部署入口为 `worker/wrangler.toml`。在 Worker 设置 `ALLOWED_ORIGIN` 为工作台的 HTTPS 来源，并将 `APP_TOKEN` 和模型密钥存为 Worker Secrets。美国税则工具使用同源 `/api/tariffs/us`，部署工作台时需包含根目录的 `functions/`。
 
+根目录 `wrangler.toml` 将 Pages 的 `/api/ai` 入口绑定到 `borderwise-ai-proxy`。设置页预填该同源地址。`POST {"action":"verify_token"}` 按 Worker 的 `APP_TOKEN` 鉴权后返回验证结果，模型调用在验证通过后的正常问答中执行。
+
 运行 `npm test` 可检查本地规则、会话、工具审核、接口兼容和模型适配器。涉及模型和官方税则的测试使用模拟响应。

@@ -149,6 +149,10 @@ async function handle(request, env) {
     }
     return response(400, { error: '请求不是有效的 UTF-8 JSON。' }, origin);
   }
+  if (payload?.action === 'verify_token') {
+    if (publicAccess) return response(403, { error: '此服务未启用 Token 验证。' }, origin);
+    return response(200, { verified: true }, origin);
+  }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
       typeof payload.question !== 'string' || !payload.question.trim()) {
     return response(400, { error: '请提供非空字符串 question。' }, origin);

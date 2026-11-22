@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.mjs';
+import { onRequest as pagesAi } from '../../functions/api/ai.js';
 
 const origin = 'https://demo.github.io';
 const env = {
@@ -58,6 +59,33 @@ test('requires configured secrets and validates bearer token before upstream', a
     assert.equal(r.headers.get('access-control-allow-origin'), origin);
     assert.equal(calls, 0);
   });
+});
+
+test('checks a Token without contacting the model and only for a protected deployment', async () => {
+  const payload = { action: 'verify_token' };
+  await withFetch(() => assert.fail('Token verification must not call the model'), async () => {
+    const invalid = await worker.fetch(req(payload, { headers: {
+      Origin: origin, Authorization: 'Bearer wrong', 'Content-Type': 'application/json',
+    } }), env);
+    assert.equal(invalid.status, 401);
+
+    const verified = await worker.fetch(req(payload), env);
+    assert.equal(verified.status, 200);
+    assert.equal(verified.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await json(verified), { verified: true });
+
+    const unprotected = await worker.fetch(req(payload), { ...env, PUBLIC_ACCESS: 'true' });
+    assert.equal(unprotected.status, 403);
+  });
+});
+
+test('the same-origin Pages route forwards verification to the bound Worker', async () => {
+  const request = req({ action: 'verify_token' });
+  assert.equal(pagesAi({ request, env: {} }).status, 503);
+  const binding = { fetch: next => worker.fetch(next, env) };
+  const verified = await pagesAi({ request, env: { BORDERWISE_AI: binding } });
+  assert.equal(verified.status, 200);
+  assert.deepEqual(await json(verified), { verified: true });
 });
 
 test('rejects malformed, oversized, and invalid inputs', async () => {
