@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111214">
+  <meta name="theme-color" content="#11110f">
   <meta name="description" content="Borderwise 跨境合规工作台：整理报关资料，生成谨慎的人工复核清单。">
   <title>Borderwise · 跨境合规工作台</title>
   <link rel="stylesheet" href="./styles.css">
@@ -38,21 +38,21 @@
     <button class="search-trigger" type="button" id="sidebarSearch" aria-keyshortcuts="Control+K Meta+K">
       <span class="icon" data-icon="search"></span><span>查找工具</span><kbd aria-hidden="true" id="searchShortcut">Ctrl K</kbd>
     </button>
-    <button class="new-task" id="newTask"><span class="icon" data-icon="plus"></span> 开启新分析 <span class="new-arrow" aria-hidden="true">↗</span></button>
+    <button class="new-task" id="newTask"><span class="icon" data-icon="plus"></span>开启新分析</button>
     <nav class="navigation" aria-label="主菜单">
-      <button class="nav-item active" id="navChat" aria-current="page"><span class="icon" data-icon="message"></span>合规助手<span class="nav-indicator"></span></button>
+      <button class="nav-item active" id="navChat" aria-current="page"><span class="icon" data-icon="message"></span>合规助手</button>
       <button class="nav-item" id="navForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
       <button class="nav-item" id="navPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
       <button class="nav-item" id="navWorkflow"><span class="icon" data-icon="package"></span>物流执行</button>
-      <button class="nav-item" id="navSources"><span class="icon" data-icon="globe"></span>官方资料库<span class="nav-external">↗</span></button>
+      <button class="nav-item" id="navSources"><span class="icon" data-icon="globe"></span>官方资料库</button>
     </nav>
     <section id="recentCase" aria-labelledby="historyLabel" hidden>
       <div class="sidebar-divider"></div>
       <div class="history-label" id="historyLabel">最近</div>
-      <button class="history-item" id="historyButton"><span class="history-dot"></span><span id="historyTitle"></span></button>
+      <button class="history-item" id="historyButton"><span class="icon" data-icon="file"></span><span id="historyTitle"></span></button>
     </section>
     <div class="sidebar-bottom">
-      <button class="settings-link" id="openSettings"><span class="icon" data-icon="settings"></span><span>设置与数据</span><span class="settings-arrow">↗</span></button>
+      <button class="settings-link" id="openSettings"><span class="icon" data-icon="settings"></span><span>设置与数据</span></button>
     </div>
   </aside>
 
@@ -61,7 +61,7 @@
       <button class="mobile-menu" id="mobileMenu" aria-label="主菜单" aria-expanded="false" aria-controls="sidebar"><span class="icon" data-icon="menu"></span></button>
       <strong class="workspace-title">合规助手</strong>
       <div class="topbar-actions">
-        <span class="mode-indicator"><span></span><b id="modeLabel">本地检查模式</b></span>
+        <span class="mode-indicator" id="modeLabel">本地检查模式</span>
         <button class="top-icon mobile-search" type="button" id="topSearch" aria-label="查找工具"><span class="icon" data-icon="search"></span></button>
         <button class="top-icon" id="topSources" aria-label="查看官方资料"><span class="icon" data-icon="help"></span></button>
       </div>
@@ -70,64 +70,12 @@
     <div class="content-wrap">
       <section class="conversation-area" aria-label="合规助手对话">
         <div class="conversation-inner">
-          <div class="intro" id="intro">
-            <div class="hero">
-              <div class="hero-content">
-                <h1>出口合规助手</h1>
-              </div>
-              <div class="hero-image" aria-hidden="true">
-                <img src="./assets/round-tree.webp" alt="" width="528" height="528" loading="lazy">
-              </div>
-            </div>
-            <section class="workbench-tools" aria-labelledby="workbenchToolsTitle">
-              <h2 class="sr-only" id="workbenchToolsTitle">工作台工具</h2>
-              <div class="workbench-tool-list">
-                <button class="workbench-tool" type="button" id="toolForm">
-                  <span class="icon" data-icon="file"></span>
-                  <strong>报关资料检查</strong>
-                  <span class="tool-arrow" aria-hidden="true">↗</span>
-                </button>
-                <button class="workbench-tool" type="button" id="toolPlanning">
-                  <span class="icon" data-icon="route"></span>
-                  <strong>关税与运输比价</strong>
-                  <span class="tool-arrow" aria-hidden="true">↗</span>
-                </button>
-                <button class="workbench-tool" type="button" id="toolWorkflow">
-                  <span class="icon" data-icon="package"></span>
-                  <strong>物流执行</strong>
-                  <span class="tool-arrow" aria-hidden="true">↗</span>
-                </button>
-                <button class="workbench-tool" type="button" id="toolSources">
-                  <span class="icon" data-icon="globe"></span>
-                  <strong>官方资料库</strong>
-                  <span class="tool-arrow" aria-hidden="true">↗</span>
-                </button>
-              </div>
-            </section>
-            <section class="quick-start" aria-labelledby="quickStartTitle">
-              <h2 id="quickStartTitle">快速提问</h2>
-              <div class="suggestions">
-                <button class="suggestion" type="button" data-question="我准备把商品出口到德国，报关前需要检查哪些材料？">
-                  <strong>出口前资料检查</strong>
-                  <span class="suggest-arrow" aria-hidden="true">↗</span>
-                </button>
-                <button class="suggestion" type="button" data-question="出口到欧盟时，如何核验 HS 编码与 CBAM 是否适用？">
-                  <strong>编码与规则核验</strong>
-                  <span class="suggest-arrow" aria-hidden="true">↗</span>
-                </button>
-                <button class="suggestion" type="button" data-question="如何核实原产地、制裁名单与潜在物流风险？">
-                  <strong>跨境风险排查</strong>
-                  <span class="suggest-arrow" aria-hidden="true">↗</span>
-                </button>
-              </div>
-            </section>
-          </div>
-
+          <header class="intro" id="intro"><h1>出口合规助手</h1></header>
           <div class="messages" id="messages" aria-live="polite"></div>
           <div class="composer-wrap">
             <form id="chatForm" class="composer">
               <label for="chatInput" class="sr-only">输入合规问题</label>
-              <textarea id="chatInput" rows="2" placeholder="描述你的跨境问题…" maxlength="2000"></textarea>
+              <textarea id="chatInput" rows="2" placeholder="输入报关、关税或运输问题…" maxlength="2000"></textarea>
               <div class="composer-bottom">
                 <button type="button" id="attachCase" class="tool-button"><span class="icon" data-icon="sliders"></span><span>填写货物资料</span></button>
                 <button class="send-button" type="submit" aria-label="发送问题"><span class="icon" data-icon="arrow-up"></span></button>
@@ -135,17 +83,36 @@
             </form>
             <p class="composer-note">仅供辅助，不构成法律意见或报关结论。</p>
           </div>
+          <div class="workbench-start">
+            <section class="quick-start" aria-labelledby="quickStartTitle">
+              <h2 id="quickStartTitle">常用问题</h2>
+              <div class="suggestions">
+                <button class="suggestion" type="button" data-question="出口到德国，报关前需要检查哪些材料？">出口到德国，报关前需要检查哪些材料？</button>
+                <button class="suggestion" type="button" data-question="出口到欧盟时，如何核验 HS 编码与 CBAM 是否适用？">如何核验 HS 编码与 CBAM？</button>
+                <button class="suggestion" type="button" data-question="如何核实原产地、制裁名单与潜在物流风险？">如何核实原产地和跨境风险？</button>
+              </div>
+            </section>
+            <section class="workbench-tools" aria-labelledby="workbenchToolsTitle">
+              <h2 id="workbenchToolsTitle">业务工具</h2>
+              <div class="workbench-tool-list">
+                <button class="workbench-tool" type="button" id="toolForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
+                <button class="workbench-tool" type="button" id="toolPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
+                <button class="workbench-tool" type="button" id="toolWorkflow"><span class="icon" data-icon="package"></span>物流执行</button>
+                <button class="workbench-tool" type="button" id="toolSources"><span class="icon" data-icon="globe"></span>官方资料库</button>
+              </div>
+            </section>
+          </div>
         </div>
       </section>
 
       <aside class="insight-panel" aria-label="分析概览">
         <div class="panel-top"><h2>分析概览</h2></div>
         <div class="case-card">
-          <div class="case-card-head"><span class="mini-icon"><span class="icon" data-icon="layers"></span></span><span class="case-status" id="caseStatus"><span></span> 待开始</span></div>
+          <p class="case-status" id="caseStatus">待开始</p>
           <h3 id="caseProduct" hidden></h3>
           <p id="caseDescription" hidden></p>
-          <button id="panelForm" class="case-link">填写货物资料 <span>↗</span></button>
-          <button id="panelPlanning" class="case-link">查关税与比较运费 <span aria-hidden="true">↗</span></button>
+          <button id="panelForm" class="case-link">填写货物资料</button>
+          <button id="panelPlanning" class="case-link">查关税与比较运费</button>
         </div>
         <div id="reviewDetails" hidden>
           <div class="panel-section-head"><h3>检查事项</h3><span id="checkCount" class="count-badge"></span></div>
@@ -154,12 +121,15 @@
             <progress id="reviewProgress" aria-label="人工复核进度" max="1" value="0"></progress>
           </div>
           <div id="checklist" class="checklist"></div>
-          <button type="button" id="viewReview" class="case-link">打开完整清单 <span aria-hidden="true">↗</span></button>
+          <button type="button" id="viewReview" class="case-link">打开完整清单</button>
           <button id="exportReport" class="export-button" disabled><span class="icon" data-icon="download"></span> 导出复核清单</button>
         </div>
         <div class="panel-divider"></div>
-        <div class="sources-heading"><div><h3>官方查询入口</h3></div><button id="moreSources">查看全部 ↗</button></div>
-        <div class="source-list"><a href="https://trade.ec.europa.eu/access-to-markets/en/home" target="_blank" rel="noopener noreferrer"><span class="source-symbol eu">EU</span><span><strong>Access2Markets</strong></span><span class="external">↗</span></a><a href="https://ofac.treasury.gov/sanctions-list-service" target="_blank" rel="noopener noreferrer"><span class="source-symbol us">US</span><span><strong>OFAC</strong></span><span class="external">↗</span></a></div>
+        <div class="sources-heading"><h3>官方查询入口</h3><button id="moreSources">查看全部</button></div>
+        <div class="source-list">
+          <a href="https://trade.ec.europa.eu/access-to-markets/en/home" target="_blank" rel="noopener noreferrer"><span>欧盟 Access2Markets</span><span class="external" aria-hidden="true">↗</span></a>
+          <a href="https://ofac.treasury.gov/sanctions-list-service" target="_blank" rel="noopener noreferrer"><span>美国 OFAC</span><span class="external" aria-hidden="true">↗</span></a>
+        </div>
       </aside>
     </div>
   </main>
@@ -173,12 +143,12 @@
     <label class="sr-only" for="toolSearchInput">输入工具名称</label>
     <div class="search-box"><span class="icon" data-icon="search"></span><input id="toolSearchInput" type="search" placeholder="搜索关税、货物资料、设置…" autocomplete="off"></div>
     <div class="search-results">
-      <button type="button" data-search-target="navChat" data-search-terms="提问 问答 对话 chat"><span class="icon" data-icon="message"></span>合规助手<span aria-hidden="true">↗</span></button>
-      <button type="button" data-search-target="navForm" data-search-terms="填入 货物 资料 HS 清单 report"><span class="icon" data-icon="file"></span>报关资料检查<span aria-hidden="true">↗</span></button>
-      <button type="button" data-search-target="navPlanning" data-search-terms="税率 海运 物流 报价 HS tariff shipping"><span class="icon" data-icon="route"></span>关税与运输比价<span aria-hidden="true">↗</span></button>
-      <button type="button" data-search-target="navWorkflow" data-search-terms="订舱 拖车 单证 交付 物流 异常 Incoterms 询价"><span class="icon" data-icon="package"></span>物流执行<span aria-hidden="true">↗</span></button>
-      <button type="button" data-search-target="navSources" data-search-terms="政策 海关 法规 来源 OFAC"><span class="icon" data-icon="globe"></span>官方资料库<span aria-hidden="true">↗</span></button>
-      <button type="button" data-search-target="openSettings" data-search-terms="worker ai 配置 清除 模式"><span class="icon" data-icon="settings"></span>设置与数据<span aria-hidden="true">↗</span></button>
+      <button type="button" data-search-target="navChat" data-search-terms="提问 问答 对话 chat"><span class="icon" data-icon="message"></span>合规助手</button>
+      <button type="button" data-search-target="navForm" data-search-terms="填入 货物 资料 HS 清单 report"><span class="icon" data-icon="file"></span>报关资料检查</button>
+      <button type="button" data-search-target="navPlanning" data-search-terms="税率 海运 物流 报价 HS tariff shipping"><span class="icon" data-icon="route"></span>关税与运输比价</button>
+      <button type="button" data-search-target="navWorkflow" data-search-terms="订舱 拖车 单证 交付 物流 异常 Incoterms 询价"><span class="icon" data-icon="package"></span>物流执行</button>
+      <button type="button" data-search-target="navSources" data-search-terms="政策 海关 法规 来源 OFAC"><span class="icon" data-icon="globe"></span>官方资料库</button>
+      <button type="button" data-search-target="openSettings" data-search-terms="worker ai 配置 清除 模式"><span class="icon" data-icon="settings"></span>设置与数据</button>
     </div>
     <p class="search-empty" id="toolSearchEmpty" role="status" hidden>没有找到相关工具。</p>
   </form>

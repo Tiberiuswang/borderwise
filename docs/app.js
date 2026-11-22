@@ -162,7 +162,7 @@ function updatePanel() {
   const product = hasReport ? (shipment.product || '未命名货物') : '';
   const route = hasReport ? [shipment.origin, shipment.destination].filter(Boolean).join(' → ') : '';
   $('#caseStatus').classList.toggle('ready', hasReport);
-  $('#caseStatus').innerHTML = hasReport ? '<span></span> 已生成清单' : '<span></span> 待开始';
+  $('#caseStatus').textContent = hasReport ? '已生成清单' : '待开始';
   $('#caseProduct').textContent = product;
   $('#caseProduct').hidden = !product;
   $('#caseDescription').textContent = route;
@@ -184,11 +184,11 @@ function updatePanel() {
   $('#reviewProgressText').textContent = reviewSummary(report);
   for (const check of pending.slice(0, 5)) {
     const row = document.createElement('div'); row.className = 'check-row';
-    const dot = document.createElement('span'); dot.className = `check-dot ${['high','medium','info'].includes(check.level) ? check.level : 'info'}`;
+    row.dataset.level = check.level;
     const copy = document.createElement('div'); copy.className = 'check-copy';
     const title = document.createElement('strong'); title.textContent = check.title;
     const subtitle = document.createElement('small'); subtitle.textContent = levelLabel(check.level);
-    copy.append(title, subtitle); row.append(dot, copy); list.append(row);
+    copy.append(title, subtitle); row.append(copy); list.append(row);
   }
   if (pending.length > 5 || !pending.length) {
     const note = document.createElement('p');
@@ -209,7 +209,6 @@ function scrollToMessage(node) {
 function addMessage(kind, content) {
   $('#intro').hidden = true;
   const node = document.createElement('article'); node.className = `message ${kind}`;
-  const avatar = document.createElement('div'); avatar.className = 'message-avatar'; avatar.textContent = kind === 'user' ? '我' : '〇';
   const body = document.createElement('div'); body.className = 'message-body';
   const meta = document.createElement('div'); meta.className = 'message-meta';
   meta.textContent = kind === 'user' ? '你' : 'Borderwise';
@@ -217,7 +216,7 @@ function addMessage(kind, content) {
   small.textContent = { user: '提问', 'report-message': '复核清单' }[kind] || '本地助手';
   meta.append(small);
   const text = document.createElement('div'); text.className = 'message-text'; text.textContent = content;
-  body.append(meta, text); node.append(avatar, body); $('#messages').append(node);
+  body.append(meta, text); node.append(body); $('#messages').append(node);
   return { node, text, mode: small };
 }
 function addReport(current, shouldScroll = true) {
@@ -266,7 +265,7 @@ function addReport(current, shouldScroll = true) {
     item.append(label);
     list.append(item);
   }
-  const download = document.createElement('button'); download.type = 'button'; download.className = 'report-download'; download.textContent = '下载完整复核清单 ↓'; download.addEventListener('click', () => downloadReport(current));
+  const download = document.createElement('button'); download.type = 'button'; download.className = 'report-download'; download.textContent = '下载完整复核清单'; download.addEventListener('click', () => downloadReport(current));
   preview.append(title, desc, summary, hint, list, download); text.append(preview);
   if (shouldScroll) scrollToMessage(node);
 }
@@ -276,7 +275,9 @@ function canUseAI() {
 
 function updateMode() {
   const ai = canUseAI();
-  $('#modeLabel').textContent = ai ? 'AI 已启用' : (settings.enabled ? 'AI 待连接' : '本地检查模式');
+  const label = $('#modeLabel');
+  label.textContent = ai ? 'AI 已启用' : (settings.enabled ? 'AI 待连接' : '本地检查模式');
+  label.classList.toggle('connected', ai);
 }
 function inlineMarkdown(parent, text) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {
