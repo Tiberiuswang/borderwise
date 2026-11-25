@@ -13,16 +13,11 @@
 </head>
 <body>
 <main class="entrance" id="entrance" aria-labelledby="entranceTitle">
+  <h1 class="sr-only" id="entranceTitle" lang="en" tabindex="-1">Borderwise</h1>
   <div class="entrance-image" aria-hidden="true">
     <img src="./assets/round-tree.webp" alt="" width="528" height="528" fetchpriority="high">
   </div>
-  <div class="entrance-copy">
-    <h1 class="entrance-title" id="entranceTitle" lang="en" tabindex="-1">
-      <span class="entrance-name">Borderwise</span>
-      <span class="entrance-greeting">Welcome</span>
-    </h1>
-    <a class="entrance-button" href="#workspace" lang="en">Start<span aria-hidden="true">→</span></a>
-  </div>
+  <a class="entrance-button" href="#workspace" aria-label="进入工作台"></a>
 </main>
 <div class="app-shell">
   <a class="skip-link" href="#workspace">跳到主要内容</a>
