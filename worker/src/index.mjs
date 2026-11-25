@@ -3,6 +3,7 @@ import { createModelClient } from './adapters/model-client.mjs';
 import { createRequestSessionStore } from './adapters/session-store.mjs';
 import { createTradeTools } from './adapters/trade-tools.mjs';
 import { createLogisticsTools } from './adapters/logistics-tools.mjs';
+import { expireBrowserSession, isBrowserSessionRequest, issueBrowserSession, verifyBrowserSession } from './domain/browser-session.mjs';
 import { buildSystemPrompt } from './domain/instructions.mjs';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -49,6 +50,15 @@ async function tokenMatches(supplied, expected) {
   let difference = 0;
   for (let i = 0; i < aa.length; i++) difference |= aa[i] ^ bb[i];
   return difference === 0;
+}
+
+function validBearer(request, expected) {
+  const match = /^Bearer ([\x21-\x7e]{1,512})$/i.exec(request.headers.get('Authorization') || '');
+  return match ? tokenMatches(match[1], expected) : false;
+}
+
+function unauthorized(origin) {
+  return response(401, { error: '访问口令无效。' }, origin, { 'WWW-Authenticate': 'Bearer' });
 }
 
 class SizeLimitError extends Error {}
@@ -120,15 +130,13 @@ async function handle(request, env) {
   }
   const publicAccess = env.PUBLIC_ACCESS === 'true';
   const client = createModelClient(env, { readBytes });
-  if ((!publicAccess && (typeof env.APP_TOKEN !== 'string' || !env.APP_TOKEN)) || !client) {
+  const configured = Boolean(client && (publicAccess || (typeof env.APP_TOKEN === 'string' && env.APP_TOKEN)));
+  const browserRequest = isBrowserSessionRequest(request, origin);
+  if (!browserRequest && !configured) {
     return response(500, { error: '服务配置不完整，请联系部署者。' }, origin);
   }
-  if (!publicAccess) {
-    const authorization = request.headers.get('Authorization') || '';
-    const match = /^Bearer ([\x21-\x7e]{1,512})$/i.exec(authorization);
-    if (!match || !(await tokenMatches(match[1], env.APP_TOKEN))) {
-      return response(401, { error: '访问口令无效。' }, origin, { 'WWW-Authenticate': 'Bearer' });
-    }
+  if (!browserRequest && !publicAccess && !(await validBearer(request, env.APP_TOKEN))) {
+    return unauthorized(origin);
   }
   const contentType = (request.headers.get('Content-Type') || '').split(';', 1)[0].trim().toLowerCase();
   if (contentType !== 'application/json') {
@@ -149,9 +157,34 @@ async function handle(request, env) {
     }
     return response(400, { error: '请求不是有效的 UTF-8 JSON。' }, origin);
   }
-  if (payload?.action === 'verify_token') {
+  const action = payload?.action;
+  const session = {
+    origin,
+    appToken: env.APP_TOKEN,
+    secret: typeof env.AI_SESSION_SECRET === 'string' && env.AI_SESSION_SECRET.trim()
+      ? env.AI_SESSION_SECRET : client?.providerKey,
+  };
+  if (action === 'session_status' || action === 'sign_out') {
+    if (!browserRequest) return response(403, { error: '此操作需要站内 AI 服务。' }, origin);
+    if (action === 'sign_out') {
+      return response(200, { connected: false }, origin, { 'Set-Cookie': expireBrowserSession() });
+    }
+    const connected = configured && !publicAccess && await verifyBrowserSession(request, session);
+    return response(200, { connected }, origin);
+  }
+
+  if (!configured) return response(500, { error: '服务配置不完整，请联系部署者。' }, origin);
+  if (action === 'verify_token') {
     if (publicAccess) return response(403, { error: '此服务未启用 Token 验证。' }, origin);
-    return response(200, { verified: true }, origin);
+    if (!browserRequest) return response(200, { verified: true }, origin);
+    if (!(await validBearer(request, env.APP_TOKEN))) return unauthorized(origin);
+    const cookie = await issueBrowserSession(session);
+    return response(200, { verified: true }, origin, { 'Set-Cookie': cookie });
+  }
+  if (browserRequest && !publicAccess) {
+    const authenticated = request.headers.has('Authorization')
+      ? await validBearer(request, env.APP_TOKEN) : await verifyBrowserSession(request, session);
+    if (!authenticated) return unauthorized(origin);
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
       typeof payload.question !== 'string' || !payload.question.trim()) {
@@ -221,7 +254,8 @@ async function handle(request, env) {
       if (!result.answer) throw new Error('Empty model answer');
     }
 
-    const secrets = [client.providerKey, env.APP_TOKEN].filter(secret => typeof secret === 'string' && secret);
+    const secrets = [client.providerKey, env.APP_TOKEN, env.AI_SESSION_SECRET]
+      .filter(secret => typeof secret === 'string' && secret.trim());
     const answer = secrets.reduce((text, secret) => text.replaceAll(secret, '[已隐藏]'), result.answer);
     return response(200, { ...result, answer }, origin);
   } catch {

@@ -20,13 +20,19 @@ const icons = {
 $$('[data-icon]').forEach(element => { element.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[element.dataset.icon] || ''}</svg>`; });
 
 const STORAGE = { shipment:'borderwise-shipment-v1', report:'borderwise-report-v1', settings:'borderwise-settings-v1' };
+const PENDING_SIGN_OUT = 'borderwise-ai-sign-out-pending-v1';
 const getStored = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
 const setStored = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { toast('无法保存到本地浏览器，当前内容仍可使用。'); } };
+try { localStorage.removeItem(STORAGE.settings); } catch { /* Ignore legacy settings when storage is unavailable. */ }
 let report = getStored(STORAGE.report) || null;
 let shipment = report?.input || getStored(STORAGE.shipment) || {};
-const savedSettings = getStored(STORAGE.settings) || {};
 const workerUrl = new URL(AI_CONFIG.url, location.href).href;
-let settings = { enabled: savedSettings.enabled === true, token: '' };
+const supportsAISession = window.isSecureContext && new URL(workerUrl).origin === location.origin &&
+  !/(?:^|\.)github\.io$/i.test(location.hostname);
+let aiConnection = 'local';
+let activeSessionCheck = null;
+let endingAISession = false;
+let redactionToken = '';
 let activeReply = null;
 let activeVerification = null;
 const sessionStore = createSessionStore();
@@ -107,8 +113,9 @@ function showSources() { openDialog('sourcesDialog'); }
 function showSettings() {
   openDialog('settingsDialog', 'input[name="token"]');
   $('#settingsForm').elements.url.value = workerUrl;
-  $('#disconnectAI').hidden = !canUseAI();
-  connectionStatus(canUseAI() ? 'AI 已连接' : '');
+  if (endingAISession) connectionStatus('正在断开 AI…');
+  else if (activeSessionCheck) connectionStatus('正在检查 AI 连接…');
+  else showConnectionState();
 }
 
 function connectionStatus(text, isError = false) {
@@ -120,8 +127,91 @@ function connectionStatus(text, isError = false) {
 function cancelVerification() {
   activeVerification?.abort();
   activeVerification = null;
-  $('#connectAI').disabled = false;
-  $('#settingsForm').elements.token.readOnly = false;
+  updateMode();
+}
+
+function showConnectionState() {
+  if (aiConnection === 'unavailable') connectionStatus('暂时无法确认 AI 连接。', true);
+  else connectionStatus(canUseAI() ? 'AI 已连接' : '');
+}
+
+function sessionRequest(action, { signal, token = '' }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(workerUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action }),
+    credentials: 'same-origin',
+    redirect: 'error',
+    cache: 'no-store',
+    signal,
+  });
+}
+
+async function refreshAISession() {
+  if (!supportsAISession || activeSessionCheck || activeVerification || endingAISession) return;
+  if (getStored(PENDING_SIGN_OUT) === true) {
+    await disconnectAISession();
+    return;
+  }
+  const controller = new AbortController();
+  activeSessionCheck = controller;
+  updateMode();
+  if (!$('#settingsDialog').hidden) connectionStatus('正在检查 AI 连接…');
+  let next = 'unavailable';
+  try {
+    const response = await sessionRequest('session_status', {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+    });
+    if (response.ok) {
+      const { connected } = await response.json();
+      if (typeof connected === 'boolean') next = connected ? 'connected' : 'local';
+    }
+  } catch { /* Keep the local assistant usable if the session service is unavailable. */ }
+  if (activeSessionCheck !== controller) return;
+  activeSessionCheck = null;
+  aiConnection = next;
+  updateMode();
+  if (!$('#settingsDialog').hidden) showConnectionState();
+}
+
+async function disconnectAISession() {
+  endingAISession = true;
+  activeSessionCheck?.abort();
+  activeSessionCheck = null;
+  cancelVerification();
+  $('#settingsForm').elements.token.value = '';
+  activeReply?.abort();
+  aiConnection = 'local';
+  redactionToken = '';
+  updateMode();
+  connectionStatus('正在断开 AI…');
+
+  let disconnected = !supportsAISession;
+  if (supportsAISession) {
+    try { localStorage.setItem(PENDING_SIGN_OUT, 'true'); } catch { /* Retry remains available in settings. */ }
+    try {
+      const response = await sessionRequest('sign_out', { signal: AbortSignal.timeout(12000) });
+      disconnected = response.ok && (await response.json())?.connected === false;
+    } catch { /* An unverifiable sign-out leaves the local assistant available. */ }
+  }
+  if (disconnected) forgetPendingSignOut();
+  endingAISession = false;
+  aiConnection = disconnected ? 'local' : 'unavailable';
+  updateMode();
+  if (!$('#settingsDialog').hidden) {
+    connectionStatus(disconnected ? 'AI 已断开' : '无法断开 AI，请重试。', !disconnected);
+    const focused = document.activeElement;
+    if (focused === document.body || focused === $('#disconnectAI')) {
+      (disconnected ? $('#settingsForm').elements.token : $('#disconnectAI')).focus();
+    }
+  }
+  return disconnected;
+}
+
+function forgetPendingSignOut() {
+  try { localStorage.removeItem(PENDING_SIGN_OUT); } catch { /* Storage can be unavailable. */ }
 }
 
 const toolSearchInput = $('#toolSearchInput');
@@ -270,14 +360,22 @@ function addReport(current, shouldScroll = true) {
   if (shouldScroll) scrollToMessage(node);
 }
 function canUseAI() {
-  return Boolean(settings.enabled && settings.token);
+  return aiConnection === 'connected' && !activeSessionCheck && !endingAISession;
 }
 
 function updateMode() {
   const ai = canUseAI();
+  const pending = Boolean(activeSessionCheck || endingAISession);
   const label = $('#modeLabel');
-  label.textContent = ai ? 'AI 已启用' : (settings.enabled ? 'AI 待连接' : '本地检查模式');
+  label.textContent = endingAISession ? '正在断开 AI' : activeSessionCheck ? '正在检查 AI 连接' :
+    ai ? 'AI 已启用' : '本地检查模式';
   label.classList.toggle('connected', ai);
+  $('#chatForm button[type=submit]').disabled = pending || Boolean(activeReply);
+  $('#connectAI').disabled = pending || Boolean(activeVerification);
+  $('#settingsForm').elements.token.readOnly = endingAISession || Boolean(activeVerification);
+  $('#disconnectAI').hidden = aiConnection === 'local' && !endingAISession;
+  $('#disconnectAI').disabled = endingAISession;
+  $('#clearData').disabled = endingAISession;
 }
 function inlineMarkdown(parent, text) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {
@@ -383,8 +481,7 @@ function showLocalAnswer(message, question, currentShipment, fallback = '') {
     workflowAnswer: () => localWorkflowAnswer(question, currentShipment),
   });
   message.text.textContent = answer;
-  const { token } = settings;
-  sessionStore.append({ question: redactToken(question, token), answer: redactToken(answer, token), mode: 'local' });
+  sessionStore.append({ question: redactToken(question, redactionToken), answer: redactToken(answer, redactionToken), mode: 'local' });
   if (fallback) {
     const note = document.createElement('p');
     note.className = 'ai-fallback-note';
@@ -465,14 +562,18 @@ function redactToken(text, token) {
 }
 
 async function sendQuestion(question) {
-  const content = question.trim();
+  const content = redactToken(question.trim(), redactionToken);
   if (!content || activeReply) return;
+  if (activeSessionCheck || endingAISession) {
+    toast('正在处理 AI 连接，请稍后发送。');
+    return;
+  }
   $('#chatInput').value = '';
   addMessage('user', content);
   const currentShipment = shipment;
   if (!canUseAI()) {
     const message = addMessage('assistant', '');
-    const note = settings.enabled ? 'AI 待连接，本次由本地助手回答。可在设置中重新连接。' : '';
+    const note = aiConnection === 'unavailable' ? '暂时无法确认 AI 连接，本次由本地助手回答。' : '';
     showLocalAnswer(message, content, currentShipment, note);
     scrollToMessage(message.node);
     return;
@@ -480,34 +581,39 @@ async function sendQuestion(question) {
 
   const controller = new AbortController();
   activeReply = controller;
-  const submit = $('#chatForm button[type=submit]');
-  submit.disabled = true;
+  updateMode();
   const message = addMessage('assistant', '正在整理待核验事项…');
   message.mode.textContent = 'AI 助手';
   message.node.classList.add('pending');
-  const { token } = settings;
-  const savedQuestion = redactToken(content, token);
+  const token = redactionToken;
   try {
     const reportContext = report && { checks: report.checks, generatedAt: report.generatedAt, input: report.input };
     const logistics = logisticsContextFor(content);
     const response = await fetch(workerUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       redirect: 'error',
       body: JSON.stringify({
-        protocol: 2, question: savedQuestion, shipment: currentShipment, report: reportContext,
+        protocol: 2, question: content, shipment: currentShipment, report: reportContext,
         history: sessionStore.history(workerUrl), logistics,
       }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
     });
+    if (controller.signal.aborted) return;
+    if (response.status === 401) {
+      aiConnection = 'local';
+      if (!$('#settingsDialog').hidden && !activeVerification) connectionStatus('AI 连接已失效，请重新验证 Token。', true);
+      showLocalAnswer(message, content, currentShipment, 'AI 连接已失效，本次由本地助手回答。');
+      return;
+    }
     const payload = await response.json();
     if (controller.signal.aborted) return;
     if (!response.ok || typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
     const answer = redactToken(payload.answer, token);
     const { body, followUps } = splitFollowUps(answer.trim());
     if (!body) throw new Error('AI 服务未返回有效内容。');
-    const turn = { question: savedQuestion, answer: body, mode: 'ai', scope: workerUrl, steps: payload.steps, sources: payload.sources };
+    const turn = { question: content, answer: body, mode: 'ai', scope: workerUrl, steps: payload.steps, sources: payload.sources };
     if (!sessionStore.append(turn, token)) throw new Error('AI 服务未返回有效内容。');
     showModelAnswer(message, sessionStore.turns().at(-1));
     addFollowUps(message.node, followUps.length ? followUps : getLocalFollowUps(content, currentShipment));
@@ -517,7 +623,7 @@ async function sendQuestion(question) {
     }
   } finally {
     activeReply = null;
-    submit.disabled = false;
+    updateMode();
     if (controller.signal.aborted) message.node.remove();
     else {
       message.node.classList.remove('pending');
@@ -566,6 +672,10 @@ $('#askAgentAboutQuotes').addEventListener('click', () => {
   const status = $('#logisticsStatus');
   if (!planner.snapshot()) {
     status.textContent = '请填写共同起讫点、货量和至少两个实际运输方案。';
+    return;
+  }
+  if (activeSessionCheck || endingAISession) {
+    status.textContent = '正在处理 AI 连接，请稍后重试。';
     return;
   }
   if (!canUseAI()) {
@@ -662,8 +772,8 @@ $('#viewReview').addEventListener('click', () => {
 });
 $('#settingsForm').addEventListener('submit', async event => {
   event.preventDefault();
-  if (activeVerification) return;
-  if (!window.isSecureContext || /(?:^|\.)github\.io$/i.test(location.hostname)) {
+  if (activeVerification || activeSessionCheck || endingAISession) return;
+  if (!supportsAISession) {
     connectionStatus('请在 Borderwise 的 Cloudflare 站点验证 Token。', true);
     return;
   }
@@ -676,19 +786,12 @@ $('#settingsForm').addEventListener('submit', async event => {
   }
 
   const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]);
   activeVerification = controller;
-  $('#connectAI').disabled = true;
-  tokenInput.readOnly = true;
+  updateMode();
   connectionStatus('正在验证 Token…');
   try {
-    const response = await fetch(workerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ action: 'verify_token' }),
-      credentials: 'omit',
-      redirect: 'error',
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
-    });
+    const response = await sessionRequest('verify_token', { signal, token });
     if (activeVerification !== controller) return;
     if (response.status === 401) {
       connectionStatus('Token 无效，请核对后重试。', true);
@@ -697,10 +800,19 @@ $('#settingsForm').addEventListener('submit', async event => {
     }
     if (!response.ok || (await response.json())?.verified !== true) throw new Error('Token verification unavailable');
     if (activeVerification !== controller) return;
+    const status = await sessionRequest('session_status', { signal });
+    if (!status.ok) throw new Error('AI session unavailable');
+    const { connected } = await status.json();
+    if (activeVerification !== controller) return;
+    if (connected !== true) {
+      connectionStatus('Token 已验证，但未能建立浏览器会话。', true);
+      return;
+    }
 
     activeReply?.abort();
-    settings = { enabled: true, token };
-    setStored(STORAGE.settings, { enabled: true });
+    redactionToken = token;
+    aiConnection = 'connected';
+    forgetPendingSignOut();
     updateMode();
     closeDialogs();
     toast('Token 已验证，AI 已连接');
@@ -710,23 +822,21 @@ $('#settingsForm').addEventListener('submit', async event => {
     if (activeVerification === controller) cancelVerification();
   }
 });
-$('#disconnectAI').addEventListener('click', () => {
-  activeReply?.abort();
-  settings = { enabled: false, token: '' };
-  setStored(STORAGE.settings, { enabled: false });
-  updateMode();
-  closeDialogs();
-  toast('已切换到本地模式');
+$('#disconnectAI').addEventListener('click', async () => {
+  if (endingAISession) return;
+  const disconnected = await disconnectAISession();
+  toast(disconnected ? '已切换到本地模式' : '无法断开 AI，请重试。');
 });
-$('#clearData').addEventListener('click', () => {
-  if (!window.confirm('确定清除货物资料、清单、物流资料、设置和当前标签页的对话？此操作不可撤销。')) return;
-  activeReply?.abort();
+$('#clearData').addEventListener('click', async () => {
+  if (endingAISession || !window.confirm('确定断开 AI 并清除货物资料、清单、物流资料和当前标签页的对话？此操作不可撤销。')) return;
+  const signOut = disconnectAISession();
   Object.values(STORAGE).forEach(key => { try { localStorage.removeItem(key); } catch {} });
   sessionStore.clear();
-  shipment = {}; report = null; settings = { enabled:false, token:'' }; setFormValues({}); clearMessages(); updatePanel(); updateMode(); closeDialogs(); toast('本网站的本地数据已清除');
+  shipment = {}; report = null; setFormValues({}); clearMessages(); updatePanel();
   planner.setShipment(shipment);
   workflow.clear();
   workflow.setShipment(shipment);
+  toast(await signOut ? '本网站的本地数据已清除' : '本地数据已清除，无法断开 AI，请重试。');
 });
 updatePanel(); updateMode();
 if (report && Array.isArray(report.checks)) addReport(report, false);
@@ -739,6 +849,9 @@ for (const turn of sessionStore.turns()) {
     addFollowUps(message.node, getLocalFollowUps(turn.question, shipment));
   }
 }
+
+refreshAISession();
+window.addEventListener('pageshow', event => { if (event.persisted) refreshAISession(); });
 
 window.addEventListener('hashchange', () => {
   const inWorkspace = location.hash === '#workspace';

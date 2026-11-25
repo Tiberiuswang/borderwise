@@ -23,7 +23,7 @@ flowchart LR
 
 ## 会话与执行
 
-- 标签页最多保存 12 轮对话，刷新可恢复。同一 Worker 只接收最近至多 8 条 AI 对话消息，整段历史最多 3 KiB。更换货物或开启新分析时重新开始会话，访问口令只保存在页面内存中。
+- 标签页最多保存 12 轮对话，刷新可恢复。同一 Worker 只接收最近至多 8 条 AI 对话消息，整段历史最多 3 KiB。更换货物或开启新分析时重新开始对话。
 - Worker 在每次请求内保存模型及工具消息。客户端只可传入用户和助手消息。每轮提问至多调用模型 4 次、审核 4 次工具请求。重复调用会被拦截，模型和工具共享 30 秒的请求时限。
 - `review_shipment` 根据表单运行本地规则。`lookup_tariff` 校验目的地和 HS 编码后查询美国 USITC 或英国 HMRC。`official_sources` 提供按主题整理的官方入口。成功查到的基础税则附查询时间，适用税负仍需结合完整税号、原产地和额外措施复核。
 - `plan_shipment_workflow` 根据货物资料和用户录入的节点，生成贸易术语分工、节点、交接单证、期限提醒和异常待办。`draft_freight_inquiry` 根据同一份货物和路线资料生成可复制的英文询价草稿。工作台也可直接在浏览器运行这两项功能。
@@ -43,6 +43,8 @@ Worker `POST` 接口接受 `question`、`shipment`、`report` 和 `history`。�
 
 部署入口为 `worker/wrangler.toml`。在 Worker 设置 `ALLOWED_ORIGIN` 为工作台的 HTTPS 来源，并将 `APP_TOKEN` 和模型密钥存为 Worker Secrets。美国税则工具使用同源 `/api/tariffs/us`，部署工作台时需包含根目录的 `functions/`。
 
-根目录 `wrangler.toml` 将 Pages 的 `/api/ai` 入口绑定到 `borderwise-ai-proxy`。设置页预填该同源地址。`POST {"action":"verify_token"}` 按 Worker 的 `APP_TOKEN` 鉴权后返回验证结果，模型调用在验证通过后的正常问答中执行。
+根目录 `wrangler.toml` 将 Pages 的 `/api/ai` 入口绑定到 `borderwise-ai-proxy`。设置页预填该同源地址。`POST {"action":"verify_token"}` 使用 Bearer Token 验证身份。同源入口签发 30 天有效的 `Secure`、`HttpOnly`、`SameSite=Strict` 会话，Cookie 仅包含签名会话信息。工作台通过 `session_status` 恢复 AI 模式，通过 `sign_out` 清除本浏览器会话。直接调用 Worker 的客户端继续使用 Bearer Token。
+
+`AI_SESSION_SECRET` 可设置为单独的高熵 Worker Secret。未设置时使用现有模型密钥签名。签名绑定站点来源和 `APP_TOKEN`，轮换 `APP_TOKEN` 或当前签名密钥会使既有会话失效。
 
 运行 `npm test` 可检查本地规则、会话、工具审核、接口兼容和模型适配器。涉及模型和官方税则的测试使用模拟响应。
