@@ -61,7 +61,7 @@
       <button class="mobile-menu" id="mobileMenu" aria-label="主菜单" aria-expanded="false" aria-controls="sidebar"><span class="icon" data-icon="menu"></span></button>
       <strong class="workspace-title">合规助手</strong>
       <div class="topbar-actions">
-        <span class="mode-indicator" id="modeLabel">本地检查模式</span>
+        <span class="mode-indicator" id="modeLabel" role="status">本地检查模式</span>
         <button class="top-icon mobile-search" type="button" id="topSearch" aria-label="查找工具"><span class="icon" data-icon="search"></span></button>
         <button class="top-icon" id="topSources" aria-label="查看官方资料"><span class="icon" data-icon="help"></span></button>
       </div>
@@ -277,7 +277,7 @@
       <label>访问 Token <input name="token" type="password" placeholder="输入 Worker 的 APP_TOKEN" aria-describedby="connectionStatus" autocomplete="off" maxlength="512" required></label>
       <p id="connectionStatus" class="connection-status" role="status"></p>
     </div>
-    <div class="setting-block"><strong>本地数据</strong><p>货物资料、清单和物流记录保存在本浏览器。对话保存在当前标签页。AI 模式会把对应问题的货物资料、物流记录或实际报价发送至所配置的服务。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
+    <div class="setting-block"><strong>本地数据</strong><p>货物资料、清单和物流记录保存在本浏览器。对话保存在当前标签页。AI 连接在此浏览器保留最多 30 天。发送 AI 问题时，相关资料会发送至 AI 服务。</p><button type="button" id="clearData" class="text-danger">清除本地数据</button></div>
     <div class="dialog-actions">
       <button type="button" class="secondary-button" id="disconnectAI" hidden>断开 AI</button>
       <button type="submit" class="primary-button" id="connectAI">验证并连接</button>
