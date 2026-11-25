@@ -37,8 +37,8 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
   place-items: center;
   min-height: 50px;
   padding: 4px 10px 4px calc(10px + .24em);
-  color: #d2d5da;
-  font: 650 clamp(28px, 7.6vw, 44px)/1.1 ui-rounded, var(--sans);
+  color: var(--brand-silver);
+  font: 650 clamp(28px, 7.6vw, 44px)/1.1 var(--brand-sans);
   letter-spacing: .24em;
   transition: color 150ms ease-out;
 }

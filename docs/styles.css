@@ -29,7 +29,8 @@
   --page-gutter: clamp(20px, 3.2vw, 52px);
   --sans: system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --display: "Songti SC", "Noto Serif CJK SC", "Noto Serif SC", STSong, SimSun, serif;
-  --wordmark: "Iowan Old Style", "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
+  --brand-sans: ui-rounded, "Arial Rounded MT Bold", var(--sans);
+  --brand-silver: #d2d5da;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -109,24 +110,10 @@ a { color: inherit; text-decoration: none; }
 .brand-mark { display: grid; flex: none; place-items: center; width: 33px; height: 33px; }
 .brand-mark img { display: block; width: 30px; height: 30px; object-fit: contain; filter: grayscale(1); }
 .brand-wordmark {
-  display: inline-flex;
-  align-items: baseline;
-  gap: .13em;
-  color: var(--action);
-  font: 400 21px/1 var(--wordmark);
-  letter-spacing: .04em;
+  color: var(--brand-silver);
+  font: 650 18px/1.1 var(--brand-sans);
+  letter-spacing: .1em;
   white-space: nowrap;
-}
-.brand-wordmark > span + span { position: relative; padding-inline-start: .15em; color: var(--ink); }
-.brand-wordmark > span + span::before {
-  position: absolute;
-  inset-inline-start: 0;
-  inset-block-start: .12em;
-  width: 1px;
-  height: .75em;
-  background: var(--accent);
-  opacity: .64;
-  content: '';
 }
 .mobile-brand { display: none; margin: 0; min-height: 44px; gap: 5px; }
 
@@ -777,7 +764,7 @@ a { color: inherit; text-decoration: none; }
   .mobile-brand { display: flex; flex: none; }
   .mobile-brand .brand-mark { width: 27px; height: 27px; }
   .mobile-brand .brand-mark img { width: 25px; height: 25px; }
-  .mobile-brand .brand-wordmark { font-size: 17px; letter-spacing: .025em; }
+  .mobile-brand .brand-wordmark { font-size: 14px; letter-spacing: .065em; }
   .workspace-title { display: none; }
   .mobile-menu, .mobile-search { display: inline-grid; }
   .topbar { min-height: 61px; }
