@@ -1,70 +1,102 @@
 const entrance = document.querySelector('#entrance');
-const emblem = entrance.querySelector('.entrance-emblem');
-const mark = emblem.querySelector('img');
+const image = entrance.querySelector('.entrance-image img');
+const start = entrance.querySelector('.entrance-button');
+const root = document.documentElement;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const parallax = matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine)');
-let pull = null;
-let recoil = null;
+let flight = null;
 
-function bounce(x = 0, y = 0) {
-  if (reduced.matches) return;
-  recoil?.cancel();
-  mark.style.transform = '';
-  recoil = mark.animate([
-    { transform: `translate(${x}px, ${y}px) rotate(${x / 2}deg) scale(.94)` },
-    { transform: 'translateY(2px) scale(1.12)', offset: .45 },
-    { transform: 'translateY(-1px) scale(.98)', offset: .73 },
-    { transform: 'none' },
-  ], { duration: 380, easing: 'ease-out' });
+function visibleBrandMark() {
+  return [...document.querySelectorAll('.app-shell .brand .brand-mark img')].find(mark => {
+    const { width, height } = mark.getBoundingClientRect();
+    return width > 0 && height > 0 && getComputedStyle(mark).visibility === 'visible';
+  });
 }
 
-emblem.addEventListener('pointerdown', event => {
-  if (reduced.matches || !event.isPrimary || event.button !== 0) return;
-  recoil?.cancel();
-  pull = { id: event.pointerId, startX: event.clientX, startY: event.clientY, x: 0, y: 0 };
-  emblem.setPointerCapture(event.pointerId);
-});
-
-emblem.addEventListener('pointermove', event => {
-  if (event.pointerId !== pull?.id) return;
-  pull.x = Math.max(-15, Math.min(15, (event.clientX - pull.startX) * .5));
-  pull.y = Math.max(-15, Math.min(15, (event.clientY - pull.startY) * .5));
-  mark.style.transform = `translate(${pull.x}px, ${pull.y}px) rotate(${pull.x / 2}deg) scale(.94)`;
-});
-
-function release(event) {
-  if (event.pointerId !== pull?.id) return;
-  const { x, y } = pull;
-  pull = null;
-  bounce(x, y);
-}
-
-for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  emblem.addEventListener(name, release);
-}
-
-emblem.addEventListener('click', event => {
-  if (event.detail === 0) bounce();
-});
-
-function resetMotion() {
-  emblem.disabled = reduced.matches;
-  entrance.style.removeProperty('--art-x');
-  entrance.style.removeProperty('--art-y');
-  if (reduced.matches) {
-    recoil?.cancel();
-    pull = null;
-    mark.style.transform = '';
+function finishFlight(revealWordmark = false) {
+  if (!flight) return;
+  const { ghost, brand, animation } = flight;
+  flight = null;
+  animation?.cancel();
+  ghost.remove();
+  brand?.removeAttribute('data-brand-arriving');
+  root.removeAttribute('data-brand-flight');
+  if (revealWordmark && !reduced.matches) {
+    brand?.querySelector('.brand-wordmark')?.animate([
+      { opacity: 0, transform: 'translateX(-4px)' },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 210, easing: 'ease-out' });
   }
 }
 
+function moveToBrand(current, from, filter) {
+  if (flight !== current) return;
+  const target = location.hash === start.hash && visibleBrandMark();
+  if (!target || reduced.matches) {
+    finishFlight();
+    return;
+  }
+
+  const to = target.getBoundingClientRect();
+  current.brand = target.closest('.brand');
+  current.brand.setAttribute('data-brand-arriving', '');
+  current.animation = current.ghost.animate([
+    { transform: 'none', filter },
+    {
+      transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`,
+      filter: getComputedStyle(target).filter,
+    },
+  ], { duration: 690, easing: 'cubic-bezier(.28, .68, .24, 1)', fill: 'forwards' });
+  current.animation.finished.then(() => {
+    if (flight === current) finishFlight(true);
+  }, () => {
+    if (flight === current) finishFlight();
+  });
+}
+
+start.addEventListener('click', event => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey ||
+      event.shiftKey || event.altKey || reduced.matches || typeof image.animate !== 'function' ||
+      !image.naturalWidth || location.hash === start.hash) return;
+  const from = image.getBoundingClientRect();
+  if (!from.width || !from.height) return;
+
+  event.preventDefault();
+  finishFlight();
+  const filter = getComputedStyle(image).filter;
+  const ghost = image.cloneNode();
+  ghost.className = 'brand-flight';
+  ghost.setAttribute('aria-hidden', 'true');
+  Object.assign(ghost.style, {
+    left: `${from.left}px`,
+    top: `${from.top}px`,
+    width: `${from.width}px`,
+    height: `${from.height}px`,
+    filter,
+  });
+  const current = { ghost };
+  flight = current;
+  root.setAttribute('data-brand-flight', '');
+  document.body.append(ghost);
+  location.hash = start.hash;
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => moveToBrand(current, from, filter));
+});
+
+function resetArt() {
+  entrance.style.removeProperty('--art-x');
+  entrance.style.removeProperty('--art-y');
+}
+
 entrance.addEventListener('pointermove', event => {
-  if (!parallax.matches || reduced.matches || pull || event.pointerType !== 'mouse') return;
+  if (!parallax.matches || reduced.matches || event.pointerType !== 'mouse') return;
   const box = entrance.getBoundingClientRect();
   entrance.style.setProperty('--art-x', `${(event.clientX - box.left) / box.width * 14 - 7}px`);
   entrance.style.setProperty('--art-y', `${(event.clientY - box.top) / box.height * 12 - 6}px`);
 });
-entrance.addEventListener('pointerleave', resetMotion);
-parallax.addEventListener('change', resetMotion);
-reduced.addEventListener('change', resetMotion);
-resetMotion();
+entrance.addEventListener('pointerleave', resetArt);
+parallax.addEventListener('change', resetArt);
+reduced.addEventListener('change', () => { resetArt(); finishFlight(); });
+window.addEventListener('resize', () => finishFlight());
+window.addEventListener('pagehide', () => finishFlight());
+window.addEventListener('hashchange', () => { if (location.hash !== start.hash) finishFlight(); });

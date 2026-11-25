@@ -7,52 +7,22 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
 
 .entrance {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  column-gap: clamp(24px, 5vw, 84px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: clamp(16px, 2.5svh, 32px);
   min-height: 100vh;
   min-height: 100svh;
   max-width: 1640px;
   margin-inline: auto;
-  padding: clamp(24px, 4vw, 64px) clamp(28px, 7.2vw, 112px);
+  padding: clamp(24px, 4svh, 56px) clamp(28px, 7.2vw, 112px);
   color: var(--ink);
 }
 
-.entrance-brand {
-  display: flex;
-  grid-area: 1 / 1 / 2 / -1;
-  align-items: center;
-  justify-self: start;
-  gap: 11px;
-  font-size: clamp(18px, 1.55vw, 23px);
-  font-weight: 590;
-  line-height: 1.1;
-  letter-spacing: -.025em;
-}
-
-.entrance-emblem {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  cursor: grab;
-  touch-action: none;
-}
-
-.entrance-emblem:active { cursor: grabbing; }
-.entrance-emblem:disabled { cursor: default; }
-.entrance-emblem img { width: 32px; height: 32px; pointer-events: none; }
-
 .entrance-image {
-  grid-area: 2 / 2;
+  grid-area: 1 / 1;
   align-self: center;
   justify-self: center;
-  width: min(100%, 60svh, 570px);
+  width: min(100%, 50svh, 520px);
 }
 
 .entrance-image img {
@@ -66,14 +36,13 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
 
 .entrance-copy {
   grid-area: 2 / 1;
-  align-self: center;
+  align-self: end;
   min-width: 0;
-  padding-block: 20px 36px;
 }
 
 .entrance-copy h1 {
   overflow-wrap: break-word;
-  font: 500 clamp(44px, 5.55vw, 88px)/1.14 var(--display);
+  font: 500 clamp(44px, 5.1vw, 75px)/1.1 var(--display);
   letter-spacing: .025em;
 }
 
@@ -110,23 +79,35 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
 .entrance-button:hover span { color: inherit; }
 .entrance :focus-visible { outline-color: var(--accent); }
 
+.brand-flight {
+  position: fixed;
+  z-index: 20;
+  display: block;
+  pointer-events: none;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+html[data-brand-flight] .app-shell .brand { opacity: 0; }
+.brand[data-brand-arriving] { visibility: hidden; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-brand-flight] .content-wrap { animation: workspace-arrival 510ms ease-out; }
+}
+
+@keyframes workspace-arrival {
+  from { opacity: .28; }
+  to { opacity: 1; }
+}
+
 @media (max-width: 700px) and (orientation: portrait) {
   .entrance {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
     row-gap: clamp(12px, 2.4svh, 24px);
     padding: 18px 24px max(28px, env(safe-area-inset-bottom));
   }
 
   .entrance-image {
-    grid-area: 2 / 1;
     width: min(72vw, 38svh, 348px);
-  }
-
-  .entrance-copy {
-    grid-area: 3 / 1;
-    align-self: end;
-    padding: 0;
   }
 
   .entrance-copy h1 { font-size: clamp(36px, 10.5vw, 58px); }
@@ -155,12 +136,19 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
 }
 
 @media (max-height: 510px) and (orientation: landscape) {
-  .entrance { padding: 14px clamp(20px, 5vw, 70px); }
-  .entrance-copy { padding-block: 8px; }
+  .entrance {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 24px;
+    padding: 14px clamp(20px, 5vw, 70px);
+  }
+  .entrance-image { grid-area: 1 / 2; width: min(100%, 73svh, 360px); }
+  .entrance-copy { grid-area: 1 / 1; align-self: center; }
   .entrance-copy h1 { font-size: clamp(30px, 6vw, 52px); }
   .entrance-button { margin-top: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .entrance-image img, .entrance-button { transition: none; }
+  .entrance-image img { transform: none; }
 }
