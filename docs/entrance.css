@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("./assets/instrument-serif-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 .app-shell:not(:has(#workspace:target)),
 body:has(#workspace:target) .entrance {
   display: none;
@@ -40,13 +48,35 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
   min-width: 0;
 }
 
-.entrance-copy h1 {
+.entrance-title {
   overflow-wrap: break-word;
-  font: 500 clamp(44px, 5.1vw, 75px)/1.1 var(--display);
-  letter-spacing: .025em;
 }
 
-.entrance-copy h1:focus { outline: none; }
+.entrance-name {
+  display: block;
+  font: 400 clamp(56px, 8vw, 104px)/.98 "Instrument Serif", var(--wordmark);
+  letter-spacing: .012em;
+}
+
+.entrance-greeting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  color: var(--action);
+  font: 500 clamp(12px, 1.1vw, 15px)/1.4 var(--sans);
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+
+.entrance-greeting::after {
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+  content: '';
+}
+
+.entrance-title:focus { outline: none; }
 
 .entrance-button {
   display: inline-flex;
@@ -60,7 +90,8 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
   border-radius: 3px;
   color: var(--ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 550;
+  letter-spacing: .09em;
   transition: color 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out;
 }
 
@@ -68,6 +99,7 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
   color: var(--accent);
   font-size: 18px;
   line-height: 1;
+  letter-spacing: normal;
 }
 
 .entrance-button:hover {
@@ -110,7 +142,7 @@ html[data-brand-flight] .app-shell .brand { opacity: 0; }
     width: min(72vw, 38svh, 348px);
   }
 
-  .entrance-copy h1 { font-size: clamp(36px, 10.5vw, 58px); }
+  .entrance-name { font-size: clamp(50px, 15vw, 78px); }
   .entrance-button { margin-top: 20px; }
 }
 
@@ -131,7 +163,8 @@ html[data-brand-flight] .app-shell .brand { opacity: 0; }
   }
 
   .entrance-image { width: min(62vw, 28svh); }
-  .entrance-copy h1 { font-size: 34px; }
+  .entrance-name { font-size: 46px; }
+  .entrance-greeting { margin-top: 8px; }
   .entrance-button { margin-top: 10px; }
 }
 
@@ -144,7 +177,7 @@ html[data-brand-flight] .app-shell .brand { opacity: 0; }
   }
   .entrance-image { grid-area: 1 / 2; width: min(100%, 73svh, 360px); }
   .entrance-copy { grid-area: 1 / 1; align-self: center; }
-  .entrance-copy h1 { font-size: clamp(30px, 6vw, 52px); }
+  .entrance-name { font-size: clamp(40px, 8vw, 68px); }
   .entrance-button { margin-top: 14px; }
 }
 
