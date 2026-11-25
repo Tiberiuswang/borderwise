@@ -293,7 +293,6 @@ function updatePanel() {
 }
 function clearMessages() {
   $('#messages').replaceChildren();
-  $('#intro').hidden = false;
 }
 
 function scrollToMessage(node) {
@@ -301,7 +300,6 @@ function scrollToMessage(node) {
 }
 
 function addMessage(kind, content) {
-  $('#intro').hidden = true;
   const node = document.createElement('article'); node.className = `message ${kind}`;
   const body = document.createElement('div'); body.className = 'message-body';
   const meta = document.createElement('div'); meta.className = 'message-meta';
@@ -806,10 +804,6 @@ webSearchToggle.addEventListener('click', () => {
   webSearchToggle.setAttribute('aria-pressed', String(webSearchToggle.getAttribute('aria-pressed') !== 'true'));
 });
 $('#chatInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendQuestion(event.currentTarget.value); } });
-$$('.suggestion').forEach(button => button.addEventListener('click', () => {
-  $('#chatInput').focus({ preventScroll: true });
-  sendQuestion(button.dataset.question || '');
-}));
 $('#exportReport').addEventListener('click', () => downloadReport(report));
 $('#viewReview').addEventListener('click', () => {
   const heading = $$('.report-preview h4', $('#messages')).at(-1);

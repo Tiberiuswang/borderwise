@@ -66,7 +66,6 @@
     <div class="content-wrap">
       <section class="conversation-area" aria-label="合规助手对话">
         <div class="conversation-inner">
-          <header class="intro" id="intro"><h1>出口合规助手</h1></header>
           <div class="messages" id="messages" aria-live="polite"></div>
           <div class="composer-wrap">
             <form id="chatForm" class="composer">
@@ -83,25 +82,15 @@
             <button type="button" class="connect-ai-hint" id="connectAIHint" hidden>在设置输入Token666999，启用 AI</button>
             <p class="composer-note">仅供辅助，不构成法律意见或报关结论</p>
           </div>
-          <div class="workbench-start">
-            <section class="quick-start" aria-labelledby="quickStartTitle">
-              <h2 id="quickStartTitle">常用问题</h2>
-              <div class="suggestions">
-                <button class="suggestion" type="button" data-question="出口到德国，报关前需要检查哪些材料？">出口到德国，报关前需要检查哪些材料？</button>
-                <button class="suggestion" type="button" data-question="出口到欧盟时，如何核验 HS 编码与 CBAM 是否适用？">如何核验 HS 编码与 CBAM？</button>
-                <button class="suggestion" type="button" data-question="如何核实原产地、制裁名单与潜在物流风险？">如何核实原产地和跨境风险？</button>
-              </div>
-            </section>
-            <section class="workbench-tools" aria-labelledby="workbenchToolsTitle">
-              <h2 id="workbenchToolsTitle">业务工具</h2>
-              <div class="workbench-tool-list">
-                <button class="workbench-tool" type="button" id="toolForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
-                <button class="workbench-tool" type="button" id="toolPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
-                <button class="workbench-tool" type="button" id="toolWorkflow"><span class="icon" data-icon="package"></span>物流执行</button>
-                <button class="workbench-tool" type="button" id="toolSources"><span class="icon" data-icon="globe"></span>官方资料库</button>
-              </div>
-            </section>
-          </div>
+          <section class="workbench-tools" aria-labelledby="workbenchToolsTitle">
+            <h2 id="workbenchToolsTitle">业务工具</h2>
+            <div class="workbench-tool-list">
+              <button class="workbench-tool" type="button" id="toolForm"><span class="icon" data-icon="file"></span>报关资料检查</button>
+              <button class="workbench-tool" type="button" id="toolPlanning"><span class="icon" data-icon="route"></span>关税与运输比价</button>
+              <button class="workbench-tool" type="button" id="toolWorkflow"><span class="icon" data-icon="package"></span>物流执行</button>
+              <button class="workbench-tool" type="button" id="toolSources"><span class="icon" data-icon="globe"></span>官方资料库</button>
+            </div>
+          </section>
         </div>
       </section>
 
