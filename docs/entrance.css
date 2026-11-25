@@ -27,7 +27,7 @@ body:not(:has(#workspace:target)) { background: var(--charcoal); }
   display: block;
   width: 100%;
   height: auto;
-  filter: grayscale(.78) sepia(.12) brightness(.86);
+  filter: grayscale(1) brightness(.86);
   transform: translate(calc(var(--art-x, 0px) * .32), calc(var(--art-y, 0px) * .32));
   transition: transform 260ms ease-out;
 }
