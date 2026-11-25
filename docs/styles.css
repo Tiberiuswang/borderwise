@@ -257,6 +257,19 @@ a { color: inherit; text-decoration: none; }
 .rich p + p, .rich h4 { margin-top: 8px; }
 .rich ul, .rich ol { margin: 7px 0; padding-left: 1.6em; }
 .rich li + li { margin-top: 4px; }
+.web-citation {
+  display: inline-block;
+  margin-inline: 2px;
+  padding-inline: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--key-hover);
+  font-size: .85em;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.web-citation:hover { background: var(--ink-surface); text-decoration: underline; }
 .ai-note { margin-top: 13px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .agent-record { margin-top: 12px; padding: 7px 0; border-block: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .agent-record summary { cursor: pointer; color: var(--ink); }
@@ -311,6 +324,7 @@ a { color: inherit; text-decoration: none; }
 
 .composer textarea::placeholder, .dialog input::placeholder, .dialog textarea::placeholder { color: var(--muted); opacity: 1; }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.composer-tools { display: flex; flex-wrap: wrap; gap: 0 6px; min-width: 0; }
 .tool-button {
   display: flex;
   align-items: center;
@@ -328,6 +342,11 @@ a { color: inherit; text-decoration: none; }
 
 .tool-button:hover { background: var(--stone); }
 .tool-button .icon { width: 17px; height: 17px; }
+.web-search-toggle[aria-pressed="true"] {
+  color: var(--key-hover);
+  background: var(--ink-surface);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
 .send-button {
   display: grid;
   flex: none;

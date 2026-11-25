@@ -6,6 +6,7 @@ const MAX_HISTORY_CONTENT_LENGTH = 4000;
 const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_BYTES = 3 * 1024;
 const MAX_STORED_LENGTH = 800 * 1024;
+const MAX_URL_LENGTH = 500;
 const encoder = new TextEncoder();
 const serializedBytes = value => encoder.encode(JSON.stringify(value)).length;
 
@@ -22,10 +23,10 @@ function boundedText(value, limit) {
 }
 
 function parseUrl(value) {
-  if (typeof value !== 'string' || value.length > 500) return null;
+  if (typeof value !== 'string' || value.length > MAX_URL_LENGTH) return null;
   try {
     const url = new URL(value);
-    return url.username || url.password ? null : url;
+    return url.username || url.password || url.href.length > MAX_URL_LENGTH ? null : url;
   } catch {
     return null;
   }
@@ -49,11 +50,17 @@ function normalizeSource(source) {
   const title = boundedText(source?.title, 160);
   const kind = source?.kind;
   if (!title || url?.protocol !== 'https:' || (kind !== 'lookup' && kind !== 'reference')) return null;
+  const webSource = (kind === 'reference' && source.method === 'search') || (kind === 'lookup' && source.method === 'page');
+  const id = webSource && typeof source.id === 'string' && /^w[1-9][0-9]{0,2}$/.test(source.id) ? source.id : '';
+  const publishedAt = webSource ? boundedText(source.publishedAt, 40) : '';
   const retrievedAt = boundedText(source.retrievedAt, 40);
   return {
     title,
     url: url.href,
     kind,
+    ...(id && { id }),
+    ...(webSource && { method: source.method }),
+    ...(publishedAt && Number.isFinite(Date.parse(publishedAt)) ? { publishedAt } : {}),
     ...(retrievedAt && Number.isFinite(Date.parse(retrievedAt)) ? { retrievedAt } : {}),
   };
 }
@@ -68,7 +75,15 @@ function normalizeTurn(turn, token = '') {
   const safeMetadata = item => item && (!token || Object.values(item).every(value =>
     !value.includes(token) && !value.includes(encodedToken)));
   const steps = Array.isArray(turn.steps) ? turn.steps.slice(0, 12).map(normalizeStep).filter(safeMetadata) : [];
-  const sources = Array.isArray(turn.sources) ? turn.sources.slice(0, 8).map(normalizeSource).filter(safeMetadata) : [];
+  const sourceIds = new Set();
+  const sources = Array.isArray(turn.sources)
+    ? turn.sources.slice(0, 8).map(normalizeSource).filter(safeMetadata).filter(source => {
+      if (!source.id) return true;
+      if (sourceIds.has(source.id)) return false;
+      sourceIds.add(source.id);
+      return true;
+    })
+    : [];
   return {
     question, answer, mode,
     ...(scope ? { scope } : {}),

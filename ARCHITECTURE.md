@@ -28,6 +28,7 @@ flowchart LR
 - `review_shipment` 根据表单运行本地规则。`lookup_tariff` 校验目的地和 HS 编码后查询美国 USITC 或英国 HMRC。`official_sources` 提供按主题整理的官方入口。成功查到的基础税则附查询时间，适用税负仍需结合完整税号、原产地和额外措施复核。
 - `plan_shipment_workflow` 根据货物资料和用户录入的节点，生成贸易术语分工、节点、交接单证、期限提醒和异常待办。`draft_freight_inquiry` 根据同一份货物和路线资料生成可复制的英文询价草稿。工作台也可直接在浏览器运行这两项功能。
 - `compare_transport_quotes` 用与本地工作台相同的计算规则比较实际报价。附加费可录总额或分项，部分分项只计入已知小计。服务范围、报价有效期和汇率缺口影响排名。跨币种比较只向汇率接口发送币种，税费在基础运费以外另行核验。
+- `web_search` 和 `read_page` 在用户开启「联网搜索」后可用。搜索从本轮问题提取查询词，读页使用本轮搜索结果或问题中公开链接的来源编号。工具把搜索摘要和已读取的正文分别标记，回答可用 `[w1]` 等编号引用本轮来源。
 
 ## 接口与部署
 
@@ -35,11 +36,15 @@ Worker `POST` 接口接受 `question`、`shipment`、`report` 和 `history`。�
 
 `protocol: 2` 可附带 `logistics.workflow` 和 `logistics.comparison`，合计最多 8 KiB。工作台仅在相关 AI 提问中附带已录入的物流记录或实际报价，演示报价限于本地。首次调用模型只传入物流上下文可用状态。Worker 提供期限检查和草稿，现场状态与后续操作仍由业务人员确认。
 
+`protocol: 2` 可传入 `webSearch: true` 以启用公开网页工具。查询只使用当前问题。工具返回编号、来源链接、查询时间以及可用的网页发布日期，前端将匹配当前回答来源的编号渲染成可点击引用。每轮最多进行一次搜索、读取两个来源，并受 Agent 现有的工具预算和 30 秒时限约束。
+
 | `AI_PROVIDER` | 密钥 | 模型配置 |
 | --- | --- | --- |
 | `zhipu`（默认） | `ZHIPU_API_KEY` | `MODEL` 默认 `glm-5.3-flash`。可选 `ZHIPU_BASE_URL`、`THINKING`，兼容旧的 OpenAI 环境变量。 |
 | `openai` | `OPENAI_API_KEY` | 设置支持工具调用的 `MODEL`，可选 `OPENAI_BASE_URL`。 |
 | `anthropic` | `ANTHROPIC_API_KEY` | 设置支持工具调用的 `MODEL`，可选 `ANTHROPIC_BASE_URL`。 |
+
+公开网页工具默认使用智谱开放平台的独立 Web Search 和 Reader，需有可用的 `ZHIPU_API_KEY` 和相应权限与额度。也可将 `TAVILY_API_KEY` 存为 Worker Secret，以使用 Tavily Search 和 Extract。Worker 向固定服务端点发起请求，并为搜索和读取设置时间与响应大小上限。
 
 部署入口为 `worker/wrangler.toml`。在 Worker 设置 `ALLOWED_ORIGIN` 为工作台的 HTTPS 来源，并将 `APP_TOKEN` 和模型密钥存为 Worker Secrets。美国税则工具使用同源 `/api/tariffs/us`，部署工作台时需包含根目录的 `functions/`。
 

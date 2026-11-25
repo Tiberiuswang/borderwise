@@ -3,6 +3,7 @@ import { createModelClient } from './adapters/model-client.mjs';
 import { createRequestSessionStore } from './adapters/session-store.mjs';
 import { createTradeTools } from './adapters/trade-tools.mjs';
 import { createLogisticsTools } from './adapters/logistics-tools.mjs';
+import { createWebTools } from './adapters/web-tools.mjs';
 import { expireBrowserSession, isBrowserSessionRequest, issueBrowserSession, verifyBrowserSession } from './domain/browser-session.mjs';
 import { buildSystemPrompt } from './domain/instructions.mjs';
 
@@ -209,6 +210,10 @@ async function handle(request, env) {
   const shipment = payload.shipment ?? null;
   const report = payload.report ?? null;
   const useTools = payload.protocol === 2;
+  if (useTools && payload.webSearch !== undefined && typeof payload.webSearch !== 'boolean') {
+    return response(400, { error: 'webSearch 应为布尔值。' }, origin);
+  }
+  const useWeb = useTools && payload.webSearch === true;
   const logistics = useTools ? payload.logistics ?? null : null;
   if (!validContext(shipment) || !validContext(report)) {
     return response(400, { error: 'shipment 和 report 应为对象、数组、字符串或 null。' }, origin);
@@ -225,13 +230,20 @@ async function handle(request, env) {
     return response(400, { error: '上下文格式过于复杂，请简化后重试。' }, origin);
   }
 
-  const messageContext = { question: payload.question.trim(), shipment, report };
+  const secrets = [client.providerKey, env.APP_TOKEN, env.AI_SESSION_SECRET, env.ZHIPU_API_KEY, env.TAVILY_API_KEY]
+    .filter(secret => typeof secret === 'string' && secret.trim());
+  const hideSecrets = value => secrets.reduce((text, secret) => text.replaceAll(secret, '[已隐藏]'), value);
+  const messageContext = { question: hideSecrets(payload.question.trim()), shipment, report };
+  const webTools = useWeb ? createWebTools({ env, question: messageContext.question }) : [];
+  if (useWeb && !webTools.length) {
+    return response(503, { error: '当前 AI 服务尚未配置联网搜索。', code: 'web_search_unconfigured' }, origin);
+  }
   if (logistics) {
     messageContext.logistics = { hasWorkflow: Boolean(logistics.workflow), hasQuotes: Boolean(logistics.comparison) };
   }
   const context = { ...messageContext, logistics };
   const messages = [
-    { role: 'system', content: buildSystemPrompt(useTools) },
+    { role: 'system', content: buildSystemPrompt(useTools, useWeb) },
     ...history,
     { role: 'user', content: JSON.stringify(messageContext) },
   ];
@@ -244,7 +256,7 @@ async function handle(request, env) {
       result = await runAgent({
         client,
         store: createRequestSessionStore(messages),
-        tools: [...createTradeTools({ origin: allowedOrigin }), ...createLogisticsTools()],
+        tools: [...createTradeTools({ origin: allowedOrigin }), ...createLogisticsTools(), ...webTools],
         context,
         signal,
       });
@@ -254,10 +266,10 @@ async function handle(request, env) {
       if (!result.answer) throw new Error('Empty model answer');
     }
 
-    const secrets = [client.providerKey, env.APP_TOKEN, env.AI_SESSION_SECRET]
-      .filter(secret => typeof secret === 'string' && secret.trim());
-    const answer = secrets.reduce((text, secret) => text.replaceAll(secret, '[已隐藏]'), result.answer);
-    return response(200, { ...result, answer }, origin);
+    const answer = hideSecrets(result.answer);
+    const sources = result.sources?.filter(source => !secrets.some(secret => source.url.includes(secret)))
+      .map(source => ({ ...source, title: hideSecrets(source.title) }));
+    return response(200, { ...result, answer, ...(sources && { sources }) }, origin);
   } catch {
     if (signal.aborted) {
       return response(504, { error: '模型服务请求超时，请稍后重试。' }, origin);

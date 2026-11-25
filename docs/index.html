@@ -77,7 +77,10 @@
               <label for="chatInput" class="sr-only">输入合规问题</label>
               <textarea id="chatInput" rows="2" placeholder="输入报关、关税或运输问题…" maxlength="2000"></textarea>
               <div class="composer-bottom">
-                <button type="button" id="attachCase" class="tool-button"><span class="icon" data-icon="sliders"></span><span>填写货物资料</span></button>
+                <div class="composer-tools">
+                  <button type="button" id="attachCase" class="tool-button"><span class="icon" data-icon="sliders"></span><span>填写货物资料</span></button>
+                  <button type="button" id="webSearchToggle" class="tool-button web-search-toggle" aria-pressed="false" hidden><span class="icon" data-icon="globe"></span><span>联网搜索</span></button>
+                </div>
                 <button class="send-button" type="submit" aria-label="发送问题"><span class="icon" data-icon="arrow-up"></span></button>
               </div>
             </form>

@@ -105,6 +105,33 @@ test('excludes secrets and unsafe evidence from storage and the model history', 
   assert.deepEqual(session.history(endpoint), []);
 });
 
+test('keeps only safe web citation metadata in reloaded turns', () => {
+  const storage = memoryStorage();
+  const search = {
+    id: 'w1', method: 'search', kind: 'reference', title: '搜索结果', url: 'https://example.org/result',
+    publishedAt: '2026-11-20', retrievedAt: '2026-11-21T12:00:00.000Z',
+  };
+  const page = { id: 'w103', method: 'page', kind: 'lookup', title: '原文', url: 'https://example.org/page' };
+  const legacy = { kind: 'reference', title: '官方入口', url: 'https://example.org/official' };
+  createSessionStore(storage).append({
+    ...aiTurn('网上有什么资料', '请核对 [w1] 和 [w103]。'),
+    sources: [
+      { ...search, snippet: 'unpersisted snippet', content: 'unpersisted source body' },
+      { ...page, publishedAt: 'unknown date' },
+      { ...page, id: 'w1', url: 'https://example.org/duplicate' },
+      { ...page, id: 'w3', url: 'javascript:alert(1)' },
+      { ...page, id: 'w4', url: `https://example.org/${'货'.repeat(100)}` },
+      { ...legacy, id: 'w5', method: 'page', publishedAt: '2026-11-20' },
+      { ...search, id: 'w01', url: 'https://example.org/no-citation' },
+    ],
+  });
+  const { id, ...searchWithoutId } = search;
+  assert.deepEqual(createSessionStore(storage).turns()[0].sources, [
+    search, page, legacy, { ...searchWithoutId, url: 'https://example.org/no-citation' },
+  ]);
+  assert.doesNotMatch(storage.getItem(key), /unpersisted|javascript|duplicate|unknown date/);
+});
+
 test('isolates malformed or unsupported saved state and snapshots cannot mutate it', () => {
   const storage = memoryStorage();
   for (const raw of ['broken JSON', '["array"]', '{"version":2,"turns":[]}', '{"version":1,"turns":{}}']) {

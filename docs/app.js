@@ -41,6 +41,7 @@ let previousFocus = null;
 const dialogIds = ['searchDialog', 'caseDialog', 'planningDialog', 'workflowDialog', 'sourcesDialog', 'settingsDialog'];
 const planner = createTradePlanner(shipment);
 const workflow = createWorkflowWorkspace($('#workflowDialog'), shipment);
+const webSearchToggle = $('#webSearchToggle');
 const mobileLayout = matchMedia('(max-width: 760px)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const quoteQuestion = /比价|(?:比较|对比|分析|复核|看.*录入|哪种|哪个|哪家).{0,16}(?:报价|运费|运价|费用|成本|时效|运输方案)|(?:报价|运费|运价|费用|成本|运输方案|时效).{0,16}(?:对比|比较|最低|更低|更快|便宜|差多少)|\b(?:compare|review|analy[sz]e)\b.{0,35}\b(?:quotes?|freight|shipping costs?|transit times?)\b/i;
@@ -374,6 +375,8 @@ function updateMode() {
     ai ? 'AI 已启用' : '本地检查模式';
   label.classList.toggle('connected', ai);
   $('#connectAIHint').hidden = !supportsAISession || pending || ai || Boolean(activeVerification);
+  webSearchToggle.hidden = !ai;
+  if (!ai) webSearchToggle.setAttribute('aria-pressed', 'false');
   $('#chatForm button[type=submit]').disabled = pending || Boolean(activeReply);
   $('#connectAI').disabled = pending || Boolean(activeVerification);
   $('#settingsForm').elements.token.readOnly = endingAISession || Boolean(activeVerification);
@@ -381,15 +384,42 @@ function updateMode() {
   $('#disconnectAI').disabled = endingAISession;
   $('#clearData').disabled = endingAISession;
 }
-function inlineMarkdown(parent, text) {
+function sourceLink(source, text) {
+  const link = document.createElement('a');
+  link.href = source.url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = text;
+  return link;
+}
+
+function appendCitedText(parent, text, citations) {
+  let start = 0;
+  for (const match of text.matchAll(/\[(w[1-9][0-9]{0,2})\]/g)) {
+    const source = citations.get(match[1]);
+    if (!source) continue;
+    const link = sourceLink(source, match[0]);
+    link.className = 'web-citation';
+    link.setAttribute('aria-label', `来源 ${source.id} · ${source.title}`);
+    parent.append(text.slice(start, match.index), link);
+    start = match.index + match[0].length;
+  }
+  parent.append(text.slice(start));
+}
+
+function inlineMarkdown(parent, text, citations) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*)/g)) {
     if (!part) continue;
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) { const strong = document.createElement('strong'); strong.textContent = part.slice(2, -2); parent.append(strong); }
-    else parent.append(document.createTextNode(part.replace(/\*\*/g, '')));
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      const strong = document.createElement('strong');
+      appendCitedText(strong, part.slice(2, -2), citations);
+      parent.append(strong);
+    } else appendCitedText(parent, part.replace(/\*\*/g, ''), citations);
   }
 }
-function renderMarkdown(target, source) {
+function renderMarkdown(target, source, evidence = []) {
   target.replaceChildren(); target.classList.add('rich');
+  const citations = new Map(evidence.filter(item => item.id).map(item => [item.id, item]));
   let list = null; let listType = '';
   const flush = () => { list = null; listType = ''; };
   for (const raw of source.split(/\r?\n/)) {
@@ -398,12 +428,12 @@ function renderMarkdown(target, source) {
     const heading = /^#{1,4}\s+(.*)$/.exec(line);
     const bullet = /^[-*•]\s+(.*)$/.exec(line);
     const numbered = /^\d+[.、)]\s+(.*)$/.exec(line);
-    if (heading) { flush(); const h = document.createElement('h4'); inlineMarkdown(h, heading[1]); target.append(h); }
+    if (heading) { flush(); const h = document.createElement('h4'); inlineMarkdown(h, heading[1], citations); target.append(h); }
     else if (bullet || numbered) {
       const type = bullet ? 'ul' : 'ol';
       if (!list || listType !== type) { list = document.createElement(type); listType = type; target.append(list); }
-      const li = document.createElement('li'); inlineMarkdown(li, (bullet || numbered)[1]); list.append(li);
-    } else { flush(); const p = document.createElement('p'); inlineMarkdown(p, line); target.append(p); }
+      const li = document.createElement('li'); inlineMarkdown(li, (bullet || numbered)[1], citations); list.append(li);
+    } else { flush(); const p = document.createElement('p'); inlineMarkdown(p, line, citations); target.append(p); }
   }
 }
 function splitFollowUps(answer) {
@@ -503,11 +533,22 @@ const toolNames = new Map([
   ['plan_shipment_workflow', '复核运输节点与单证'],
   ['compare_transport_quotes', '比较实际运输报价'],
   ['draft_freight_inquiry', '生成英文询价草稿'],
+  ['web_search', '联网搜索'],
+  ['read_page', '读取网页'],
 ]);
 const stepLabels = new Map([
   ['ok', '完成'], ['needs_input', '需补资料'], ['unavailable', '暂不可用'],
   ['denied', '未执行'], ['error', '执行失败'],
 ]);
+
+function appendSourceTime(row, label, value, dateOnly = false) {
+  if (!value) return;
+  const time = document.createElement('time');
+  time.dateTime = value;
+  const date = new Date(value);
+  time.textContent = dateOnly ? date.toLocaleDateString('zh-CN', { timeZone: 'UTC' }) : date.toLocaleString('zh-CN');
+  row.append(` · ${label} `, time);
+}
 
 function addAgentRecord(node, { steps = [], sources = [] }) {
   if (!steps.length && !sources.length) return;
@@ -529,20 +570,12 @@ function addAgentRecord(node, { steps = [], sources = [] }) {
     const list = document.createElement('ul');
     for (const source of sources) {
       const row = document.createElement('li');
-      const link = document.createElement('a');
-      link.href = source.url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = source.title;
-      row.append(link);
-      const type = source.kind === 'lookup' ? '已查询' : '供复核';
+      row.append(sourceLink(source, source.id ? `[${source.id}] ${source.title}` : source.title));
+      const type = source.method === 'page' ? '已读取网页' : source.method === 'search' ? '搜索摘要' :
+        source.kind === 'lookup' ? '已查询' : '供复核';
       row.append(` · ${type}`);
-      if (source.retrievedAt) {
-        const time = document.createElement('time');
-        time.dateTime = source.retrievedAt;
-        time.textContent = new Date(source.retrievedAt).toLocaleString('zh-CN');
-        row.append(' · ', time);
-      }
+      appendSourceTime(row, '发布', source.publishedAt, true);
+      appendSourceTime(row, '查阅', source.retrievedAt);
       list.append(row);
     }
     record.append(list);
@@ -552,7 +585,7 @@ function addAgentRecord(node, { steps = [], sources = [] }) {
 
 function showModelAnswer(message, turn) {
   message.mode.textContent = 'AI 助手';
-  renderMarkdown(message.text, turn.answer);
+  renderMarkdown(message.text, turn.answer, turn.sources);
   const note = document.createElement('p');
   note.className = 'ai-note';
   note.textContent = '模型输出可能出错，请按适用日期和完整税则逐项人工复核。';
@@ -601,6 +634,7 @@ async function sendQuestion(question) {
       body: JSON.stringify({
         protocol: 2, question: content, shipment: currentShipment, report: reportContext,
         history: sessionStore.history(workerUrl), logistics,
+        ...(webSearchToggle.getAttribute('aria-pressed') === 'true' && { webSearch: true }),
       }),
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)])
     });
@@ -613,6 +647,10 @@ async function sendQuestion(question) {
     }
     const payload = await response.json();
     if (controller.signal.aborted) return;
+    if (response.status === 503 && payload?.code === 'web_search_unconfigured') {
+      showLocalAnswer(message, content, currentShipment, '当前 AI 服务尚未配置联网搜索。');
+      return;
+    }
     if (!response.ok || typeof payload.answer !== 'string' || !payload.answer.trim()) throw new Error('AI 服务未返回有效内容。');
     const answer = redactToken(payload.answer, token);
     const { body, followUps } = splitFollowUps(answer.trim());
@@ -763,6 +801,10 @@ $('#caseForm').addEventListener('submit', event => {
   toast(removedReviews ? `已重新生成清单，${removedReviews} 项需重新复核` : '复核清单已生成');
 });
 $('#chatForm').addEventListener('submit', event => { event.preventDefault(); sendQuestion($('#chatInput').value); });
+webSearchToggle.addEventListener('click', () => {
+  if (!canUseAI()) return;
+  webSearchToggle.setAttribute('aria-pressed', String(webSearchToggle.getAttribute('aria-pressed') !== 'true'));
+});
 $('#chatInput').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendQuestion(event.currentTarget.value); } });
 $$('.suggestion').forEach(button => button.addEventListener('click', () => {
   $('#chatInput').focus({ preventScroll: true });

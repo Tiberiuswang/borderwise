@@ -24,7 +24,17 @@ function safeSources(sources) {
       const url = new URL(source.url);
       if (url.protocol !== 'https:' || url.username || url.password) return [];
       const result = { title: source.title.slice(0, 160), url: url.href, kind: source.kind };
-      if (source.kind === 'lookup' && typeof source.retrievedAt === 'string' &&
+      const isWeb = typeof source.id === 'string' && /^w[1-9][0-9]{0,2}$/.test(source.id) &&
+        ((source.method === 'page' && source.kind === 'lookup') ||
+         (source.method === 'search' && source.kind === 'reference'));
+      if (isWeb) {
+        result.id = source.id;
+        result.method = source.method;
+        if (typeof source.publishedAt === 'string' && Number.isFinite(Date.parse(source.publishedAt))) {
+          result.publishedAt = new Date(source.publishedAt).toISOString().slice(0, 10);
+        }
+      }
+      if ((source.kind === 'lookup' || isWeb) && typeof source.retrievedAt === 'string' &&
           Number.isFinite(Date.parse(source.retrievedAt))) {
         result.retrievedAt = new Date(source.retrievedAt).toISOString();
       }
@@ -72,7 +82,11 @@ export async function runAgent({ client, store, tools, context, signal }) {
       const answer = reply.content.trim().slice(0, 16_000);
       if (!answer) throw new Error('Empty model answer');
       await store.append({ role: 'assistant', content: answer });
-      return { answer, steps, sources: [...sources.values()] };
+      const cited = new Set([...answer.matchAll(/\[(w[1-9][0-9]{0,2})\]/g)].map(match => match[1]));
+      const available = [...sources.values()];
+      const ordered = [...available.filter(source => cited.has(source.id)),
+        ...available.filter(source => !cited.has(source.id))];
+      return { answer, steps, sources: ordered.slice(0, 8) };
     }
     if (!allowTools) throw new Error('Agent iteration limit');
 
@@ -96,8 +110,9 @@ export async function runAgent({ client, store, tools, context, signal }) {
       const { name } = message.function;
       steps.push({ name: registry.has(name) ? name : 'unknown', status: result.status });
       for (const source of result.sources || []) {
-        const previous = sources.get(source.url);
-        if (previous ? previous.kind !== 'lookup' : sources.size < 8) sources.set(source.url, source);
+        const key = source.id || source.url;
+        const previous = sources.get(key);
+        if (!previous || previous.kind !== 'lookup') sources.set(key, source);
       }
       await store.append({ role: 'tool', tool_call_id: message.id, content });
     }
