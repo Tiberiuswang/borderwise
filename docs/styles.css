@@ -343,7 +343,22 @@ a { color: inherit; text-decoration: none; }
 
 .send-button:hover { background: var(--key-hover); }
 .send-button:disabled { color: var(--muted); background: var(--ink-surface); }
+.connect-ai-hint {
+  display: block;
+  min-height: 36px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  color: var(--action);
+  background: transparent;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 13px;
+}
+.connect-ai-hint:hover { color: var(--ink); }
 .composer-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.connect-ai-hint:not([hidden]) + .composer-note { margin-top: 0; }
 
 .insight-panel {
   position: sticky;

@@ -89,7 +89,10 @@ function closeDialogs(restoreFocus = true) {
   const dialogWasOpen = $('.app-shell').inert;
   $('.app-shell').inert = false;
   setMobileMenu(false);
-  if (restoreFocus && dialogWasOpen && previousFocus instanceof HTMLElement) previousFocus.focus();
+  if (restoreFocus && dialogWasOpen && previousFocus instanceof HTMLElement) {
+    const focusTarget = previousFocus === $('#connectAIHint') && previousFocus.hidden ? $('#chatInput') : previousFocus;
+    focusTarget.focus();
+  }
 }
 function setFormValues(input) {
   const form = $('#caseForm');
@@ -370,6 +373,7 @@ function updateMode() {
   label.textContent = endingAISession ? '正在断开 AI' : activeSessionCheck ? '正在检查 AI 连接' :
     ai ? 'AI 已启用' : '本地检查模式';
   label.classList.toggle('connected', ai);
+  $('#connectAIHint').hidden = !supportsAISession || pending || ai || Boolean(activeVerification);
   $('#chatForm button[type=submit]').disabled = pending || Boolean(activeReply);
   $('#connectAI').disabled = pending || Boolean(activeVerification);
   $('#settingsForm').elements.token.readOnly = endingAISession || Boolean(activeVerification);
@@ -690,6 +694,7 @@ $('#askAgentAboutQuotes').addEventListener('click', () => {
 $('#toolSources').addEventListener('click', showSources);
 $('#navSources').addEventListener('click', showSources); $('#topSources').addEventListener('click', showSources); $('#moreSources').addEventListener('click', showSources);
 $('#openSettings').addEventListener('click', showSettings);
+$('#connectAIHint').addEventListener('click', showSettings);
 $('#sidebarSearch').addEventListener('click', showToolSearch);
 $('#topSearch').addEventListener('click', showToolSearch);
 toolSearchInput.addEventListener('input', filterTools);
